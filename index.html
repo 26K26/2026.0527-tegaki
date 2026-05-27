@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>平方根手書き小テスト（B案：自己採点版）</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+  
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      margin: 20px;
+      background-color: #f0f4f8;
+    }
+
+    #start-screen, #quiz-screen, #result-screen {
+      max-width: 600px;
+      margin: 0 auto;
+      background-color: #fff;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    }
+
+    h2 { font-size: 24px; margin-bottom: 15px; color: #333; }
+
+    form label { display: block; margin: 15px 0 5px; font-size: 18px; text-align: left; }
+    form input, form select {
+      font-size: 16px; padding: 10px; width: 100%; max-width: 350px;
+      margin-top: 5px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 6px;
+    }
+
+    #question-text { font-size: 34px; margin-bottom: 15px; font-weight: bold; }
+    
+    /* 手書きキャンバスの設定 */
+    #canvas-container { margin: 15px auto; position: relative; width: 400px; height: 200px; }
+    canvas {
+      border: 2px dashed #78909c; background-color: #fafafa; border-radius: 8px;
+      cursor: crosshair; touch-action: none; /* タブレットでのスクロール暴発防止 */
+    }
+
+    .canvas-tools { margin-bottom: 20px; }
+    .canvas-tools button {
+      padding: 6px 15px; font-size: 14px; background-color: #78909c; color: white;
+      border: none; border-radius: 4px; cursor: pointer;
+    }
+
+    /* 自己採点エリア */
+    #checking-area {
+      display: none; margin: 20px rgba(0,0,0,0.05); padding: 15px;
+      background-color: #e8f5e9; border-radius: 8px;
+    }
+    #correct-answer-display { font-size: 28px; color: #2e7d32; margin-bottom: 15px; }
+
+    .button-group button {
+      padding: 12px 30px; font-size: 18px; margin: 0 10px; border: none;
+      color: white; border-radius: 6px; cursor: pointer; font-weight: bold;
+    }
+    .btn-action { background-color: #0288d1; }
+    .btn-action:hover { background-color: #01579b; }
+    .btn-ox { width: 100px; font-size: 20px !important; }
+    .btn-o { background-color: #4caf50; }
+    .btn-x { background-color: #f44336; }
+
+    #quiz-screen, #result-screen { display: none; }
+    #loading { display: none; color: #666; font-size: 18px; margin-top: 20px; }
+  </style>
+</head>
+<body>
+
+<div id="start-screen">
+  <h2>平方根手書きテスト (自己採点)</h2>
+  <form id="user-form">
+    <label for="name">名前</label>
+    <input type="text" id="name" required>
+    <label for="grade">学年</label>
+    <input type="text" id="grade" required>
+    <label for="number">出席番号</label>
+    <select id="number" required></select>
+    <div class="button-group" style="margin-top:25px;">
+      <button type="submit" class="btn-action">テスト開始</button>
+    </div>
+  </form>
+</div>
+
+<div id="quiz-screen">
+  <div id="question-text"></div>
+  
+  <div id="canvas-container">
+    <canvas id="handwriting-canvas" width="400" height="200"></canvas>
+  </div>
+  <div class="canvas-tools">
+    <button type="button" onclick="clearCanvas()">書き直す (消去)</button>
+  </div>
+
+  <div class="button-group" id="action-layer">
+    <button type="button" class="btn-action" onclick="revealAnswer()">答えをみる</button>
+  </div>
+
+  <div id="checking-area">
+    <div id="correct-answer-display"></div>
+    <p style="margin-bottom:10px; font-weight:bold; color:#555;">自分の手書きと見比べて選んでください：</p>
+    <div class="button-group">
+      <button type="button" class="btn-o btn-ox" onclick="handleSelfAssessment(1)">〇 正解</button>
+      <button type="button" class="btn-x btn-ox" onclick="handleSelfAssessment(0)">× まちがい</button>
+    </div>
+  </div>
+</div>
+
+<div id="result-screen">
+  <h2>テスト終了</h2>
+  <p id="status-text">データを集計しています。そのままお待ちください...</p>
+  <div id="loading">送信中...</div>
+</div>
+
+<script>
+  // 💡 ご自身の新しいGASのウェブアプリURLをここに貼り付けてください
+  const GAS_URL = 'https://script.google.com/macros/s/XXXXX/exec';
+
+  // テスト用問題プール（5問構成）
+  const quizData = [
+    { question: '\\sqrt{12}', answer: '2√3' },
+    { question: '\\sqrt{20}', answer: '2√5' },
+    { question: '3\\sqrt{2}', answer: '√18' },
+    { question: '\\sqrt{45}', answer: '3√5' },
+    { question: '2\\sqrt{7}', answer: '√28' }
+  ];
+
+  let currentIdx = 0;
+  let userInfo = {};
+  let studentScores = [];
+  let capturedImages = [];
+
+  // Canvas関連の変数
+  let canvas, ctx, isDrawing = false;
+
+  window.addEventListener('DOMContentLoaded', () => {
+    const numSel = document.getElementById('number');
+    for (let i = 1; i <= 15; i++) {
+      let opt = document.createElement('option');
+      opt.value = i; opt.textContent = i + "番";
+      numSel.appendChild(opt);
+    }
+    initCanvas();
+  });
+
+  // キャンバスの初期化とタッチイベントの設定
+  function initCanvas() {
+    canvas = document.getElementById('handwriting-canvas');
+    ctx = canvas.getContext('2d');
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#1a237e';
+
+    function getPos(e) {
+      let rect = canvas.getBoundingClientRect();
+      let clientX = e.clientX || (e.touches && e.touches[0].clientX);
+      let clientY = e.clientY || (e.touches && e.touches[0].clientY);
+      return { x: clientX - rect.left, y: clientY - rect.top };
+    }
+    function start(e) { isDrawing = true; ctx.beginPath(); let p = getPos(e); ctx.moveTo(p.x, p.y); }
+    function move(e) { if(!isDrawing) return; e.preventDefault(); let p = getPos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); }
+    function stop() { isDrawing = false; }
+
+    canvas.addEventListener('mousedown', start);
+    canvas.addEventListener('mousemove', move);
+    canvas.addEventListener('mouseup', stop);
+    canvas.addEventListener('touchstart', start, {passive: false});
+    canvas.addEventListener('touchmove', move, {passive: false});
+    canvas.addEventListener('touchend', stop);
+  }
+
+  function clearCanvas() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+
+  // 開始処理
+  document.getElementById('user-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    userInfo = {
+      name: document.getElementById('name').value.trim(),
+      grade: document.getElementById('grade').value.trim(),
+      number: document.getElementById('number').value
+    };
+    document.getElementById('start-screen').style.display = 'none';
+    document.getElementById('quiz-screen').style.display = 'block';
+    showQuestion();
+  });
+
+  function showQuestion() {
+    clearCanvas();
+    document.getElementById('action-layer').style.display = 'block';
+    document.getElementById('checking-area').style.display = 'none';
+    
+    const q = quizData[currentIdx];
+    document.getElementById('question-text').innerHTML = `問 ${currentIdx + 1}: \\(${q.question}\\) =`;
+    if (window.MathJax) MathJax.typesetPromise();
+  }
+
+  // 「答えをみる」クリック時
+  function revealAnswer() {
+    document.getElementById('action-layer').style.display = 'none';
+    document.getElementById('checking-area').style.display = 'block';
+    
+    const q = quizData[currentIdx];
+    document.getElementById('correct-answer-display').innerHTML = `正解： \\(${q.answer}\\)`;
+    if (window.MathJax) MathJax.typesetPromise();
+  }
+
+  // 自己採点ボタン（〇か×）が押された時
+  function handleSelfAssessment(score) {
+    studentScores.push(score);
+
+    // キャンバスの手書き内容を軽量なJPEG（画質30%）のBase64文字列として取得
+    const imgData = canvas.toDataURL('image/jpeg', 0.3);
+    capturedImages.push(imgData);
+
+    if (currentIdx < quizData.length - 1) {
+      currentIdx++;
+      showQuestion();
+    } else {
+      processFinalSubmission();
+    }
+  }
+
+  // 最終送信処理（大容量データのため、一括POST送信を行う）
+  async function processFinalSubmission() {
+    document.getElementById('quiz-screen').style.display = 'none';
+    document.getElementById('result-screen').style.display = 'block';
+    document.getElementById('loading').style.display = 'block';
+
+    const finalScore = studentScores.reduce((a, b) => a + b, 0);
+    
+    // GASへ渡すパッケージデータの作成
+    const payload = {
+      name: userInfo.name,
+      grade: userInfo.grade,
+      number: userInfo.number,
+      score: finalScore,
+      results: studentScores.join(','),
+      images: capturedImages // Base64の画像配列
+    };
+
+    try {
+      // 💡 画像を含むため、text/plainでJSON文字列をPOSTする形式を選択（CORS回避テクニック）
+      await fetch(GAS_URL, {
+        method: 'POST',
+        mode: 'no-cors', 
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify(payload)
+      });
+      
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('status-text').innerHTML = `送信が完了しました！<br>お疲れ様でした。<br><br><strong>スコア: ${quizData.length}問中 ${finalScore}問正解</strong>`;
+    } catch (error) {
+      console.error(error);
+      alert("送信中にエラーが発生しました。通信環境を確認してください。");
+    }
+  }
+</script>
+</body>
+</html>
