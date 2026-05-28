@@ -51,7 +51,7 @@
   <h2>数学 手書き小テスト</h2>
   <h3 id="target-title" style="display:none;"></h3>
   
-  <div id="setup-area" style="display:none;">
+  <div id="setup-area">
     <p class="menu-title">👨‍🏫 先生用・問題配布管理メニュー</p>
     
     <label>学年</label>
@@ -123,30 +123,28 @@
   let scores = [];
   let isStudentMode = false;
 
-  // ページ読み込み時にURLパラメータを解析して画面を完全切り替え
+  // ページ読み込み時にURLパラメータを解析
   window.addEventListener('DOMContentLoaded', () => {
     const urlParams = new URLSearchParams(window.location.search);
     const pGrade = urlParams.get('g');
     const pTopic = urlParams.get('t');
     const pRandom = urlParams.get('r');
 
+    // 正しい生徒用パラメータがある場合のみ、生徒モードに切り替える
     if (pGrade && pTopic && db[pGrade] && db[pGrade][pTopic]) {
-      // 【生徒モード】パラメータがある場合
       isStudentMode = true;
-      document.getElementById('setup-area').style.display = 'none'; // 先生用メニューを完全非表示
+      document.getElementById('setup-area').style.display = 'none'; // 先生用メニューを隠す
       document.getElementById('student-login-area').style.display = 'block'; // 生徒用入力欄を表示
       
       document.getElementById('target-title').innerText = `【${pGrade}】${pTopic}`;
       document.getElementById('target-title').style.display = 'block';
       
-      // 内部データ（非表示）に値をセット
+      // 内部データに値をセット
       document.getElementById('grade-select').innerHTML = `<option value="${pGrade}">${pGrade}</option>`;
       document.getElementById('topic-select').innerHTML = `<option value="${pTopic}">${pTopic}</option>`;
       document.getElementById('random-check').checked = (pRandom === '1');
     } else {
-      // 【先生モード】パラメータがない場合（GitHubの直リンクなど）
-      document.getElementById('setup-area').style.display = 'block'; // 先生用メニューを表示
-      document.getElementById('student-login-area').style.display = 'none'; // 生徒用入力欄を完全非表示
+      // パラメータがない場合はデフォルトの先生メニューのまま
       updateTopic();
     }
   });
@@ -156,4 +154,30 @@
     const topicSel = document.getElementById('topic-select');
     topicSel.innerHTML = '<option value="">選択してください</option>';
     if(grade && db[grade]) {
-      Object.keys(db[grade]).forEach(t => topic
+      Object.keys(db[grade]).forEach(t => topicSel.innerHTML += `<option value="${t}">${t}</option>`);
+    }
+  }
+
+  function generateShareLink() {
+    const grade = document.getElementById('grade-select').value;
+    const topic = document.getElementById('topic-select').value;
+    const isRandom = document.getElementById('random-check').checked ? '1' : '0';
+    
+    if (!grade || !topic) {
+      alert("生徒に配布する「学年」と「単元」を先に選択してください。");
+      return;
+    }
+    
+    const baseUrl = window.location.origin + window.location.pathname;
+    const shareUrl = `${baseUrl}?g=${encodeURIComponent(grade)}&t=${encodeURIComponent(topic)}&r=${isRandom}`;
+    
+    document.getElementById('share-url').value = shareUrl;
+    
+    const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(shareUrl)}`;
+    document.getElementById('qr-image').src = qrApiUrl;
+    document.getElementById('qr-area').style.display = 'block';
+  }
+
+  document.getElementById('user-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const grade = document.getElementById('grade-
