@@ -61,7 +61,7 @@
     </select>
     
     <label>単元</label>
-    <select id="topic-select"><option value="">先に学年を選択</option></select>
+    <select id="topic-select"><option value="">先に学年を選択してください</option></select>
     
     <label style="display: flex; align-items: center; margin-top: 15px; background: #fff3e0; padding: 10px; border-radius: 6px; font-size: 14px;">
       <input type="checkbox" id="random-check" style="width: 20px; margin-right: 10px;">
@@ -123,7 +123,7 @@
   let scores = [];
   let isStudentMode = false;
 
-  // ページ読み込み時にURLパラメータを解析
+  // ページ読み込み時にURLパラメータを解析して画面を切り替え
   window.addEventListener('DOMContentLoaded', () => {
     const urlParams = new URLSearchParams(window.location.search);
     const pGrade = urlParams.get('g');
@@ -143,18 +143,22 @@
       document.getElementById('grade-select').innerHTML = `<option value="${pGrade}">${pGrade}</option>`;
       document.getElementById('topic-select').innerHTML = `<option value="${pTopic}">${pTopic}</option>`;
       document.getElementById('random-check').checked = (pRandom === '1');
-    } else {
-      // パラメータがない場合はデフォルトの先生メニューのまま
-      updateTopic();
     }
   });
 
+  // 学年が選ばれたら、その学年に属する単元をドロップダウンに生成する
   function updateTopic() {
     const grade = document.getElementById('grade-select').value;
     const topicSel = document.getElementById('topic-select');
+    
+    // 一旦リセット
     topicSel.innerHTML = '<option value="">選択してください</option>';
+    
+    // 選ばれた学年の単元リストをループで追加
     if(grade && db[grade]) {
-      Object.keys(db[grade]).forEach(t => topicSel.innerHTML += `<option value="${t}">${t}</option>`);
+      Object.keys(db[grade]).forEach(t => {
+        topicSel.innerHTML += `<option value="${t}">${t}</option>`;
+      });
     }
   }
 
@@ -180,4 +184,117 @@
 
   document.getElementById('user-form').addEventListener('submit', (e) => {
     e.preventDefault();
-    const grade = document.getElementById('grade-
+    const grade = document.getElementById('grade-select').value;
+    const topic = document.getElementById('topic-select').value;
+    const isRandom = document.getElementById('random-check').checked;
+    
+    let questions = [...db[grade][topic]];
+    if (isRandom) questions.sort(() => Math.random() - 0.5);
+    activeQuestions = questions.slice(0, 5); 
+    scores = new Array(activeQuestions.length).fill(null);
+
+    buildQuizUI();
+    document.getElementById('start-screen').style.display = 'none';
+    document.getElementById('quiz-screen').style.display = 'block';
+  });
+
+  function buildQuizUI() {
+    const container = document.getElementById('questions-container');
+    container.innerHTML = '';
+    canvases = []; contexts = []; isDrawingArr = [];
+
+    activeQuestions.forEach((item, index) => {
+      const block = document.createElement('div');
+      block.className = 'question-block';
+      block.innerHTML = `
+        <div class="q-text">問${index + 1}: \\(${item.q}\\) =</div>
+        <canvas id="cvs-${index}" width="400" height="150"></canvas>
+        <div class="canvas-tools"><button type="button" onclick="clearSpecificCanvas(${index})">リセット</button></div>
+        
+        <div class="answer-area" id="ans-area-${index}">
+          <div class="correct-ans">正解: \\(${item.a}\\)</div>
+          <div class="ox-buttons">
+            <button type="button" class="btn-o" id="btn-o-${index}" onclick="setScore(${index}, 1)">〇 正解</button>
+            <button type="button" class="btn-x" id="btn-x-${index}" onclick="setScore(${index}, 0)">× まちがい</button>
+          </div>
+        </div>
+      `;
+      container.appendChild(block);
+      
+      const cvs = document.getElementById(`cvs-${index}`);
+      const ctx = cvs.getContext('2d');
+      ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.strokeStyle = '#1a237e';
+      
+      canvases.push(cvs); contexts.push(ctx); isDrawingArr.push(false);
+      setupCanvasEvents(cvs, ctx, index);
+    });
+    if (window.MathJax) MathJax.typesetPromise();
+  }
+
+  function setupCanvasEvents(cvs, ctx, idx) {
+    const getPos = (e) => {
+      const rect = cvs.getBoundingClientRect();
+      const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+      const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+      const scaleX = cvs.width / rect.width;
+      const scaleY = cvs.height / rect.height;
+      return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
+    };
+    const start = (e) => { isDrawingArr[idx] = true; ctx.beginPath(); let p = getPos(e); ctx.moveTo(p.x, p.y); };
+    const move = (e) => { if(!isDrawingArr[idx]) return; e.preventDefault(); let p = getPos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); };
+    const stop = () => { isDrawingArr[idx] = false; };
+
+    cvs.addEventListener('mousedown', start); cvs.addEventListener('mousemove', move); cvs.addEventListener('mouseup', stop);
+    cvs.addEventListener('touchstart', start, {passive:false}); cvs.addEventListener('touchmove', move, {passive:false}); cvs.addEventListener('touchend', stop);
+  }
+
+  function clearSpecificCanvas(idx) {
+    contexts[idx].clearRect(0, 0, canvases[idx].width, canvases[idx].height);
+  }
+
+  function revealAllAnswers() {
+    activeQuestions.forEach((_, i) => {
+      document.getElementById(`ans-area-${i}`).style.display = 'block';
+    });
+    document.getElementById('check-ans-btn').style.display = 'none';
+    document.getElementById('submit-btn').style.display = 'block';
+    if (window.MathJax) MathJax.typesetPromise();
+  }
+
+  function setScore(idx, val) {
+    scores[idx] = val;
+    document.getElementById(`btn-o-${idx}`).classList.toggle('selected', val === 1);
+    document.getElementById(`btn-x-${idx}`).classList.toggle('selected', val === 0);
+  }
+
+  async function submitTest() {
+    if (scores.includes(null)) {
+      alert("すべての問題の「〇」か「×」を選択してください。");
+      return;
+    }
+    
+    document.getElementById('quiz-screen').style.display = 'none';
+    document.getElementById('result-screen').style.display = 'block';
+    
+    const images = canvases.map(c => c.toDataURL('image/jpeg', 0.3));
+    const finalScore = scores.reduce((a,b)=>a+b,0);
+    
+    const payload = {
+      name: document.getElementById('name').value,
+      grade: document.getElementById('grade-select').value + "_" + document.getElementById('topic-select').value,
+      number: document.getElementById('number').value, 
+      score: finalScore,
+      results: scores.join(','),
+      images: images
+    };
+
+    try {
+      await fetch(GAS_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(payload) });
+      document.getElementById('status-text').innerHTML = `送信完了！<br>スコア: ${activeQuestions.length}問中 ${finalScore}問正解`;
+    } catch (e) {
+      alert("エラーが発生しました。");
+    }
+  }
+</script>
+</body>
+</html>
