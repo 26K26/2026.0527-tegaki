@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>数学 手書き小テスト（配布機能付き完成版）</title>
+  <title>数理・他教科対応 手書き小テストシステム</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
   <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
@@ -47,21 +47,25 @@
 </head>
 <body>
 
-<div class="container" id="start-screen">
-  <h2>数学 手書き小テスト</h2>
+<div class="container" id="loading-screen">
+  <p style="font-size: 18px; font-weight: bold; color: #0288d1; margin: 20px 0 5px 0;">🔄 データを読み込み中...</p>
+  <p style="font-size: 13px; color: #666; margin-bottom: 20px;">しばらくお待ちください</p>
+</div>
+
+<div class="container" id="start-screen" style="display:none;">
+  <h2>小テストシステム</h2>
   <h3 id="target-title" style="display:none;"></h3>
   
   <div id="setup-area">
     <p class="menu-title">👨‍🏫 先生用・問題配布管理メニュー</p>
     
-    <label>学年</label>
+    <label>学年・教科</label>
     <select id="grade-select" onchange="updateTopic()">
-      <option value="">選択してください</option>
-      <option value="3年">中学3年生</option>
+      <option value="">読み込み中...</option>
     </select>
     
     <label>単元</label>
-    <select id="topic-select"><option value="">先に学年を選択してください</option></select>
+    <select id="topic-select"><option value="">先に学年・教科を選択してください</option></select>
     
     <label style="display: flex; align-items: center; margin-top: 15px; background: #fff3e0; padding: 10px; border-radius: 6px; font-size: 14px;">
       <input type="checkbox" id="random-check" style="width: 20px; margin-right: 10px;">
@@ -104,18 +108,10 @@
 </div>
 
 <script>
-  // 💡 自動反映された最新のGAS URL
+  // 💡 自動反映された最新のGAS URL（※お使いのURLに書き換わっているか確認してください）
   const GAS_URL = 'https://script.google.com/macros/s/AKfycbypi0BpMk7PVmiVGgqwuQk9FjK9vnDr9IliYDAwpEB3sfBOmGdIsPfyfvKqMOlGnsIO/exec';
 
-  const db = {
-    "3年": {
-      "平方根の変形 (a√b)": [
-        { q: '\\sqrt{12}', a: '2√3' }, { q: '\\sqrt{20}', a: '2√5' },
-        { q: '\\sqrt{45}', a: '3√5' }, { q: '\\sqrt{24}', a: '2√6' }, { q: '\\sqrt{50}', a: '5√2' }
-      ]
-    }
-  };
-
+  let db = {}; // スプレッドシートから自動取得するため最初は空
   let activeQuestions = [];
   let canvases = [];
   let contexts = [];
@@ -123,40 +119,67 @@
   let scores = [];
   let isStudentMode = false;
 
-  // ページ読み込み時にURLパラメータを解析して画面を切り替え
-  window.addEventListener('DOMContentLoaded', () => {
+  // ページ読み込み時にURLパラメータを解析して初期化通信を行う
+  window.addEventListener('DOMContentLoaded', async () => {
     const urlParams = new URLSearchParams(window.location.search);
     const pGrade = urlParams.get('g');
     const pTopic = urlParams.get('t');
     const pRandom = urlParams.get('r');
 
-    // 正しい生徒用パラメータがある場合のみ、生徒モードに切り替える
-    if (pGrade && pTopic && db[pGrade] && db[pGrade][pTopic]) {
+    if (pGrade && pTopic) {
+      // 【生徒モード】QRコードから開かれた場合：初期通信をスキップして即ログイン画面へ
       isStudentMode = true;
-      document.getElementById('setup-area').style.display = 'none'; // 先生用メニューを隠す
-      document.getElementById('student-login-area').style.display = 'block'; // 生徒用入力欄を表示
+      document.getElementById('setup-area').style.display = 'none'; 
+      document.getElementById('student-login-area').style.display = 'block'; 
       
       document.getElementById('target-title').innerText = `【${pGrade}】${pTopic}`;
       document.getElementById('target-title').style.display = 'block';
       
-      // 内部データに値をセット
+      // 内部データ（非表示）にパラメータ値をセット
       document.getElementById('grade-select').innerHTML = `<option value="${pGrade}">${pGrade}</option>`;
       document.getElementById('topic-select').innerHTML = `<option value="${pTopic}">${pTopic}</option>`;
       document.getElementById('random-check').checked = (pRandom === '1');
+      
+      // ローディングを消して開始画面を表示
+      document.getElementById('loading-screen').style.display = 'none';
+      document.getElementById('start-screen').style.display = 'block';
+    } else {
+      // 【先生モード】直リンク：スプレッドシートからメニュー（登録されている全教科・単元）をロード
+      try {
+        const res = await fetch(`${GAS_URL}?action=getMenu`);
+        db = await res.json();
+        
+        if (db.error) {
+          alert(db.error);
+          return;
+        }
+        
+        // 学年・教科のドロップダウンを動的に生成
+        const gradeSel = document.getElementById('grade-select');
+        gradeSel.innerHTML = '<option value="">選択してください</option>';
+        Object.keys(db).forEach(g => {
+          gradeSel.innerHTML += `<option value="${g}">${g}</option>`;
+        });
+        
+        updateTopic();
+        
+        // ローディングを消して管理画面を表示
+        document.getElementById('loading-screen').style.display = 'none';
+        document.getElementById('start-screen').style.display = 'block';
+      } catch (err) {
+        alert("スプレッドシートからのデータ取得に失敗しました。GASのデプロイやネット環境を確認してください。");
+      }
     }
   });
 
-  // 学年が選ばれたら、その学年に属する単元をドロップダウンに生成する
+  // 選択された学年・教科に応じて、単元ドロップダウンを動的に書き換える
   function updateTopic() {
     const grade = document.getElementById('grade-select').value;
     const topicSel = document.getElementById('topic-select');
-    
-    // 一旦リセット
     topicSel.innerHTML = '<option value="">選択してください</option>';
     
-    // 選ばれた学年の単元リストをループで追加
     if(grade && db[grade]) {
-      Object.keys(db[grade]).forEach(t => {
+      db[grade].forEach(t => {
         topicSel.innerHTML += `<option value="${t}">${t}</option>`;
       });
     }
@@ -168,7 +191,7 @@
     const isRandom = document.getElementById('random-check').checked ? '1' : '0';
     
     if (!grade || !topic) {
-      alert("生徒に配布する「学年」と「単元」を先に選択してください。");
+      alert("生徒に配布する「学年・教科」と「単元」を先に選択してください。");
       return;
     }
     
@@ -182,20 +205,44 @@
     document.getElementById('qr-area').style.display = 'block';
   }
 
-  document.getElementById('user-form').addEventListener('submit', (e) => {
+  // 生徒が「テスト開始」を押した瞬間にスプレッドシートから問題をリアルタイム取得
+  document.getElementById('user-form').addEventListener('submit', async (e) => {
     e.preventDefault();
+    
+    // ローディング画面に切り替え
+    document.getElementById('start-screen').style.display = 'none';
+    document.getElementById('loading-screen').style.display = 'block';
+    
     const grade = document.getElementById('grade-select').value;
     const topic = document.getElementById('topic-select').value;
     const isRandom = document.getElementById('random-check').checked;
     
-    let questions = [...db[grade][topic]];
-    if (isRandom) questions.sort(() => Math.random() - 0.5);
-    activeQuestions = questions.slice(0, 5); 
-    scores = new Array(activeQuestions.length).fill(null);
+    try {
+      const res = await fetch(`${GAS_URL}?action=getQuestions&grade=${encodeURIComponent(grade)}&topic=${encodeURIComponent(topic)}`);
+      const questions = await res.json();
+      
+      if (!questions || questions.length === 0) {
+        alert("該当する問題が見つかりませんでした。スプレッドシートの『問題マスタ』シートを確認してください。");
+        document.getElementById('loading-screen').style.display = 'none';
+        document.getElementById('start-screen').style.display = 'block';
+        return;
+      }
+      
+      let qList = [...questions];
+      if (isRandom) qList.sort(() => Math.random() - 0.5);
+      activeQuestions = qList.slice(0, 5); // 最大5問を出題
+      scores = new Array(activeQuestions.length).fill(null);
 
-    buildQuizUI();
-    document.getElementById('start-screen').style.display = 'none';
-    document.getElementById('quiz-screen').style.display = 'block';
+      buildQuizUI();
+      
+      // テスト画面を表示
+      document.getElementById('loading-screen').style.display = 'none';
+      document.getElementById('quiz-screen').style.display = 'block';
+    } catch (err) {
+      alert("問題データのロードに失敗しました。");
+      document.getElementById('loading-screen').style.display = 'none';
+      document.getElementById('start-screen').style.display = 'block';
+    }
   });
 
   function buildQuizUI() {
@@ -204,15 +251,19 @@
     canvases = []; contexts = []; isDrawingArr = [];
 
     activeQuestions.forEach((item, index) => {
+      // 数式（\ から始まる）か、通常の文字列かを緩く判定して表示を分ける
+      const displayQuestion = item.q.includes('\\') ? `\\(${item.q}\\)` : item.q;
+      const displayAnswer = item.a.includes('\\') ? `\\(${item.a}\\)` : item.a;
+
       const block = document.createElement('div');
       block.className = 'question-block';
       block.innerHTML = `
-        <div class="q-text">問${index + 1}: \\(${item.q}\\) =</div>
+        <div class="q-text">問${index + 1}: ${displayQuestion} =</div>
         <canvas id="cvs-${index}" width="400" height="150"></canvas>
         <div class="canvas-tools"><button type="button" onclick="clearSpecificCanvas(${index})">リセット</button></div>
         
         <div class="answer-area" id="ans-area-${index}">
-          <div class="correct-ans">正解: \\(${item.a}\\)</div>
+          <div class="correct-ans">正解: ${displayAnswer}</div>
           <div class="ox-buttons">
             <button type="button" class="btn-o" id="btn-o-${index}" onclick="setScore(${index}, 1)">〇 正解</button>
             <button type="button" class="btn-x" id="btn-x-${index}" onclick="setScore(${index}, 0)">× まちがい</button>
