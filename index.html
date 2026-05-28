@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>数学 手書き小テスト（1画面完結版）</title>
+  <title>数学 手書き小テスト（配布機能付き完成版）</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
   <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
@@ -10,11 +10,15 @@
   <style>
     body { font-family: Arial, sans-serif; margin: 20px; background-color: #f0f4f8; text-align: center; }
     .container { max-width: 600px; margin: 0 auto; background-color: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
-    h2 { color: #333; }
+    h2 { color: #333; margin-bottom: 5px; }
+    h3 { color: #0288d1; margin-top: 5px; margin-bottom: 20px; }
     
-    /* スタート画面の入力フォーム */
+    /* 入力フォーム */
     form label { display: block; margin: 15px 0 5px; font-weight: bold; text-align: left; }
     form input, form select { width: 100%; padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
+    
+    /* 先生用設定エリアの特別な装飾 */
+    #setup-area { background-color: #f9f9f9; padding: 15px; border-radius: 8px; border: 1px solid #e0e0e0; margin-top: 25px; }
     
     /* 1問ずつのブロック */
     .question-block { border: 2px solid #e0e0e0; border-radius: 8px; padding: 15px; margin-bottom: 25px; background-color: #fafafa; }
@@ -44,22 +48,43 @@
 
 <div class="container" id="start-screen">
   <h2>数学 手書き小テスト</h2>
+  <h3 id="target-title" style="display:none;"></h3>
+  
   <form id="user-form">
-    <label>名前</label><input type="text" id="name" required>
-    <label>学年</label>
-    <select id="grade-select" required onchange="updateTopic()">
-      <option value="">選択してください</option>
-      <option value="3年">中学3年生</option>
-    </select>
-    <label>単元</label>
-    <select id="topic-select" required><option value="">先に学年を選択</option></select>
-    
-    <label style="display: flex; align-items: center; margin-top: 20px; background: #fff3e0; padding: 10px; border-radius: 6px;">
-      <input type="checkbox" id="random-check" style="width: 20px; margin-right: 10px;">
-      問題をランダムに並び替える
-    </label>
+    <label>出席番号</label>
+    <input type="number" id="number" min="1" max="60" required placeholder="例: 15">
 
-    <button type="submit" class="btn-main">テスト開始</button>
+    <label>名前</label>
+    <input type="text" id="name" required placeholder="氏名を入力してください">
+    
+    <div id="setup-area">
+      <p style="font-size: 13px; color: #666; text-align: left; margin: 0 0 10px 0; font-weight: bold;">🛠️ 先生用メニュー（生徒へ配るテストの設定）</p>
+      
+      <label>学年</label>
+      <select id="grade-select" onchange="updateTopic()">
+        <option value="">選択してください</option>
+        <option value="3年">中学3年生</option>
+      </select>
+      
+      <label>単元</label>
+      <select id="topic-select"><option value="">先に学年を選択</option></select>
+      
+      <label style="display: flex; align-items: center; margin-top: 15px; background: #fff3e0; padding: 10px; border-radius: 6px; font-size: 14px;">
+        <input type="checkbox" id="random-check" style="width: 20px; margin-right: 10px;">
+        問題をランダムに並び替える
+      </label>
+
+      <button type="button" class="btn-main" style="background-color: #4caf50; font-size: 16px;" onclick="generateShareLink()">生徒用配布リンク・QRコードを作成</button>
+      
+      <div id="qr-area" style="display:none; margin-top: 20px; padding: 15px; border: 2px dashed #4caf50; border-radius: 8px; background: #f1f8e9;">
+        <p style="font-weight:bold; margin:0 0 10px 0; color:#2e7d32; font-size: 14px;">👇 生徒にこのQRコードを読み取らせてください</p>
+        <img id="qr-image" src="" alt="QRコード" style="margin-bottom:10px; border: 1px solid #ccc; background:#fff; padding:5px;"><br>
+        <input type="text" id="share-url" readonly onclick="this.select()" style="font-size:11px; text-align:center; background:#fff; color:#555; cursor:pointer;" title="クリックしてURLをコピー">
+        <p style="font-size:11px; color:#666; margin:5px 0 0 0;">（クリックするとURLを全選択できます）</p>
+      </div>
+    </div>
+
+    <button type="submit" class="btn-main" id="start-btn" style="margin-top:25px;">テスト開始</button>
   </form>
 </div>
 
@@ -76,7 +101,7 @@
 </div>
 
 <script>
-  // 💡 ご自身のGAS URL
+  // 💡 自動反映された最新のGAS URL
   const GAS_URL = 'https://script.google.com/macros/s/AKfycbypi0BpMk7PVmiVGgqwuQk9FjK9vnDr9IliYDAwpEB3sfBOmGdIsPfyfvKqMOlGnsIO/exec';
 
   const db = {
@@ -92,7 +117,34 @@
   let canvases = [];
   let contexts = [];
   let isDrawingArr = [];
-  let scores = []; // 各問題の自己採点結果
+  let scores = [];
+  let isStudentMode = false;
+
+  // ページ読み込み時にURLパラメータを解析
+  window.addEventListener('DOMContentLoaded', () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const pGrade = urlParams.get('g');
+    const pTopic = urlParams.get('t');
+    const pRandom = urlParams.get('r');
+
+    if (pGrade && pTopic && db[pGrade] && db[pGrade][pTopic]) {
+      // 生徒用モードの起動
+      isStudentMode = true;
+      document.getElementById('setup-area').style.display = 'none'; // 先生用メニューを隠す
+      
+      document.getElementById('target-title').innerText = `【${pGrade}】${pTopic}`;
+      document.getElementById('target-title').style.display = 'block';
+      
+      // 内部データに値をセット
+      document.getElementById('grade-select').innerHTML = `<option value="${pGrade}">${pGrade}</option>`;
+      document.getElementById('topic-select').innerHTML = `<option value="${pTopic}">${pTopic}</option>`;
+      document.getElementById('random-check').checked = (pRandom === '1');
+      document.getElementById('start-btn').innerText = "小テストを開始する";
+    } else {
+      // 先生用モード（初期状態）
+      updateTopic();
+    }
+  });
 
   function updateTopic() {
     const grade = document.getElementById('grade-select').value;
@@ -103,15 +155,43 @@
     }
   }
 
+  // 生徒用配布リンクとQRコードを生成する関数
+  function generateShareLink() {
+    const grade = document.getElementById('grade-select').value;
+    const topic = document.getElementById('topic-select').value;
+    const isRandom = document.getElementById('random-check').checked ? '1' : '0';
+    
+    if (!grade || !topic) {
+      alert("生徒に配布する「学年」と「単元」を先に選択してください。");
+      return;
+    }
+    
+    // 現在のHTMLのURLを取得し、パラメータを合成
+    const baseUrl = window.location.origin + window.location.pathname;
+    const shareUrl = `${baseUrl}?g=${encodeURIComponent(grade)}&t=${encodeURIComponent(topic)}&r=${isRandom}`;
+    
+    document.getElementById('share-url').value = shareUrl;
+    
+    // QRコード生成APIを利用して画像を表示
+    const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(shareUrl)}`;
+    document.getElementById('qr-image').src = qrApiUrl;
+    document.getElementById('qr-area').style.display = 'block';
+  }
+
   document.getElementById('user-form').addEventListener('submit', (e) => {
     e.preventDefault();
     const grade = document.getElementById('grade-select').value;
     const topic = document.getElementById('topic-select').value;
     const isRandom = document.getElementById('random-check').checked;
     
+    if(!grade || !topic) {
+      alert("学年と単元が選択されていません。");
+      return;
+    }
+    
     let questions = [...db[grade][topic]];
     if (isRandom) questions.sort(() => Math.random() - 0.5);
-    activeQuestions = questions.slice(0, 5); // 5問抽出
+    activeQuestions = questions.slice(0, 5); 
     scores = new Array(activeQuestions.length).fill(null);
 
     buildQuizUI();
@@ -157,7 +237,6 @@
       const rect = cvs.getBoundingClientRect();
       const clientX = e.clientX || (e.touches && e.touches[0].clientX);
       const clientY = e.clientY || (e.touches && e.touches[0].clientY);
-      // CSSによる縮小を考慮して座標を補正
       const scaleX = cvs.width / rect.width;
       const scaleY = cvs.height / rect.height;
       return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
@@ -198,14 +277,13 @@
     document.getElementById('quiz-screen').style.display = 'none';
     document.getElementById('result-screen').style.display = 'block';
     
-    // 全キャンバスの画像を取得
     const images = canvases.map(c => c.toDataURL('image/jpeg', 0.3));
     const finalScore = scores.reduce((a,b)=>a+b,0);
     
     const payload = {
       name: document.getElementById('name').value,
       grade: document.getElementById('grade-select').value + "_" + document.getElementById('topic-select').value,
-      number: "未設定", // 省略
+      number: document.getElementById('number').value, // 出席番号を正しく反映
       score: finalScore,
       results: scores.join(','),
       images: images
