@@ -2,347 +2,220 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>数学 手書き小テストシステム</title>
+  <title>数学 手書き小テスト（1画面完結版）</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
   <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
   
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      text-align: center;
-      margin: 20px;
-      background-color: #f0f4f8;
-    }
-
-    #start-screen, #quiz-screen, #result-screen {
-      max-width: 600px;
-      margin: 0 auto;
-      background-color: #fff;
-      padding: 30px;
-      border-radius: 12px;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-    }
-
-    h2 { font-size: 24px; margin-bottom: 15px; color: #333; }
-
-    form label { display: block; margin: 15px 0 5px; font-size: 18px; text-align: left; font-weight: bold; }
-    form input, form select {
-      font-size: 16px; padding: 10px; width: 100%; max-width: 350px;
-      margin-top: 5px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 6px;
-    }
-
-    /* 選択された単元を強調するデザイン */
-    .highlight-select { border-color: #0288d1 !important; background-color: #e1f5fe; }
-
-    #question-text { font-size: 34px; margin-bottom: 15px; font-weight: bold; }
+    body { font-family: Arial, sans-serif; margin: 20px; background-color: #f0f4f8; text-align: center; }
+    .container { max-width: 600px; margin: 0 auto; background-color: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+    h2 { color: #333; }
     
-    #canvas-container { margin: 15px auto; position: relative; width: 400px; height: 200px; }
-    canvas {
-      border: 2px dashed #78909c; background-color: #fafafa; border-radius: 8px;
-      cursor: crosshair; touch-action: none;
-    }
+    /* スタート画面の入力フォーム */
+    form label { display: block; margin: 15px 0 5px; font-weight: bold; text-align: left; }
+    form input, form select { width: 100%; padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
+    
+    /* 1問ずつのブロック */
+    .question-block { border: 2px solid #e0e0e0; border-radius: 8px; padding: 15px; margin-bottom: 25px; background-color: #fafafa; }
+    .q-text { font-size: 24px; font-weight: bold; margin-bottom: 10px; text-align: left; }
+    
+    canvas { border: 2px dashed #78909c; background-color: #fff; border-radius: 8px; cursor: crosshair; touch-action: none; width: 100%; max-width: 400px; height: 150px; }
+    
+    .canvas-tools { text-align: right; margin-top: 5px; }
+    .canvas-tools button { padding: 5px 10px; font-size: 12px; background-color: #9e9e9e; color: white; border: none; border-radius: 4px; cursor: pointer; }
+    
+    /* 自己採点エリア */
+    .answer-area { display: none; margin-top: 15px; padding-top: 15px; border-top: 1px dashed #ccc; }
+    .correct-ans { font-size: 22px; color: #2e7d32; font-weight: bold; margin-bottom: 10px; }
+    .ox-buttons button { padding: 8px 20px; font-size: 16px; margin: 0 5px; border: none; color: white; border-radius: 6px; cursor: pointer; }
+    .btn-o { background-color: #e0e0e0; color: #333; }
+    .btn-x { background-color: #e0e0e0; color: #333; }
+    .btn-o.selected { background-color: #4caf50; color: white; }
+    .btn-x.selected { background-color: #f44336; color: white; }
 
-    .canvas-tools { margin-bottom: 20px; }
-    .canvas-tools button {
-      padding: 6px 15px; font-size: 14px; background-color: #78909c; color: white;
-      border: none; border-radius: 4px; cursor: pointer;
-    }
-
-    #checking-area {
-      display: none; margin: 20px rgba(0,0,0,0.05); padding: 15px;
-      background-color: #e8f5e9; border-radius: 8px;
-    }
-    #correct-answer-display { font-size: 28px; color: #2e7d32; margin-bottom: 15px; }
-
-    .button-group button {
-      padding: 12px 30px; font-size: 18px; margin: 0 10px; border: none;
-      color: white; border-radius: 6px; cursor: pointer; font-weight: bold;
-    }
-    .btn-action { background-color: #0288d1; }
-    .btn-action:hover { background-color: #01579b; }
-    .btn-ox { width: 100px; font-size: 20px !important; }
-    .btn-o { background-color: #4caf50; }
-    .btn-x { background-color: #f44336; }
-
+    .btn-main { padding: 12px 30px; font-size: 18px; background-color: #0288d1; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 20px; }
+    .btn-main:hover { background-color: #01579b; }
+    
     #quiz-screen, #result-screen { display: none; }
-    #loading { display: none; color: #666; font-size: 18px; margin-top: 20px; }
   </style>
 </head>
 <body>
 
-<div id="start-screen">
+<div class="container" id="start-screen">
   <h2>数学 手書き小テスト</h2>
   <form id="user-form">
-    <label for="name">名前</label>
-    <input type="text" id="name" required placeholder="例：山田 太郎">
-
-    <label for="number">出席番号</label>
-    <select id="number" required></select>
-
-    <hr style="margin: 25px 0; border: 0; border-top: 1px solid #eee;">
-
-    <label for="grade-select">学年</label>
-    <select id="grade-select" required onchange="updateTopicOptions()">
+    <label>名前</label><input type="text" id="name" required>
+    <label>学年</label>
+    <select id="grade-select" required onchange="updateTopic()">
       <option value="">選択してください</option>
-      <option value="1年">中学1年生</option>
-      <option value="2年">中学2年生</option>
       <option value="3年">中学3年生</option>
     </select>
+    <label>単元</label>
+    <select id="topic-select" required><option value="">先に学年を選択</option></select>
+    
+    <label style="display: flex; align-items: center; margin-top: 20px; background: #fff3e0; padding: 10px; border-radius: 6px;">
+      <input type="checkbox" id="random-check" style="width: 20px; margin-right: 10px;">
+      問題をランダムに並び替える
+    </label>
 
-    <label for="topic-select">小テストの単元</label>
-    <select id="topic-select" required>
-      <option value="">先に学年を選択してください</option>
-    </select>
-
-    <div class="button-group" style="margin-top:25px;">
-      <button type="submit" class="btn-action">テスト開始</button>
-    </div>
+    <button type="submit" class="btn-main">テスト開始</button>
   </form>
 </div>
 
-<div id="quiz-screen">
-  <div id="question-text"></div>
+<div class="container" id="quiz-screen">
+  <div id="questions-container"></div>
   
-  <div id="canvas-container">
-    <canvas id="handwriting-canvas" width="400" height="200"></canvas>
-  </div>
-  <div class="canvas-tools">
-    <button type="button" onclick="clearCanvas()">書き直す (消去)</button>
-  </div>
-
-  <div class="button-group" id="action-layer">
-    <button type="button" class="btn-action" onclick="revealAnswer()">答えをみる</button>
-  </div>
-
-  <div id="checking-area">
-    <div id="correct-answer-display"></div>
-    <p style="margin-bottom:10px; font-weight:bold; color:#555;">自分の手書きと見比べて選んでください：</p>
-    <div class="button-group">
-      <button type="button" class="btn-o btn-ox" onclick="handleSelfAssessment(1)">〇 正解</button>
-      <button type="button" class="btn-x btn-ox" onclick="handleSelfAssessment(0)">× まちがい</button>
-    </div>
-  </div>
+  <button type="button" class="btn-main" id="check-ans-btn" onclick="revealAllAnswers()">答え合わせをする</button>
+  <button type="button" class="btn-main" id="submit-btn" style="display:none; background-color:#d32f2f;" onclick="submitTest()">結果を送信する</button>
 </div>
 
-<div id="result-screen">
+<div class="container" id="result-screen">
   <h2>テスト終了</h2>
-  <p id="status-text">データを集計しています。そのままお待ちください...</p>
-  <div id="loading">送信中...</div>
+  <p id="status-text">データを送信しています...</p>
 </div>
 
 <script>
-  // 💡 ご自身の新しいGASのウェブアプリURLをここに貼り付けてください
+  // 💡 ご自身のGAS URL
   const GAS_URL = 'https://script.google.com/macros/s/AKfycbwKjsEoYlws7NgFvK4w1uiOB6PVjqke_W7zuVNqZH2_jQrfd2LmDejkh0RxLE66DC6TZQ/exec';
 
-  // 💡 【変更箇所③】全学年・全単元の問題データベース
-  // ここに各学年の問題をどんどん追加していくことができます。
-  const allQuizDatabase = {
-    "1年": {
-      "正の数・負の数（加減）": [
-        { question: '5 + (-8)', answer: '-3' },
-        { question: '-4 - (-7)', answer: '3' },
-        { question: '(-6) + (-2)', answer: '-8' }
-      ],
-      "一次方程式": [
-        { question: '2x + 3 = 9', answer: 'x = 3' },
-        { question: '5x - 4 = 2x + 8', answer: 'x = 4' },
-        { question: '3(x - 2) = 6', answer: 'x = 4' }
-      ]
-    },
-    "2年": {
-      "式の計算": [
-        { question: '2(3x - y) + 4(x + 2y)', answer: '10x + 6y' },
-        { question: '12x^2y \\div 4xy', answer: '3x' }
-      ],
-      "連立方程式": [
-        { question: '\\begin{cases} x + y = 5 \\\\ 2x - y = 1 \\end{cases}', answer: 'x = 2, y = 3' }
-      ]
-    },
+  const db = {
     "3年": {
       "平方根の変形 (a√b)": [
-        { question: '\\sqrt{12}', answer: '2√3' },
-        { question: '\\sqrt{20}', answer: '2√5' },
-        { question: '\\sqrt{45}', answer: '3√5' }
-      ],
-      "平方根の変形 (√c)": [
-        { question: '3\\sqrt{2}', answer: '√18' },
-        { question: '2\\sqrt{7}', answer: '√28' }
-      ],
-      "式の展開": [
-        { question: '(x+2)(x+3)', answer: 'x^2+5x+6' },
-        { question: '(x-4)^2', answer: 'x^2-8x+16' }
+        { q: '\\sqrt{12}', a: '2√3' }, { q: '\\sqrt{20}', a: '2√5' },
+        { q: '\\sqrt{45}', a: '3√5' }, { q: '\\sqrt{24}', a: '2√6' }, { q: '\\sqrt{50}', a: '5√2' }
       ]
     }
   };
 
-  let quizData = []; // 選択された単元の問題が入る変数
-  let currentIdx = 0;
-  let userInfo = {};
-  let studentScores = [];
-  let capturedImages = [];
+  let activeQuestions = [];
+  let canvases = [];
+  let contexts = [];
+  let isDrawingArr = [];
+  let scores = []; // 各問題の自己採点結果
 
-  // Canvas関連の変数
-  let canvas, ctx, isDrawing = false;
-
-  window.addEventListener('DOMContentLoaded', () => {
-    // 出席番号の生成
-    const numSel = document.getElementById('number');
-    for (let i = 1; i <= 40; i++) { // クラス人数に合わせて40番までに拡張
-      let opt = document.createElement('option');
-      opt.value = i; opt.textContent = i + "番";
-      numSel.appendChild(opt);
-    }
-    initCanvas();
-  });
-
-  // 💡 【変更箇所④】学年が選ばれたときに単元の選択肢を切り替える処理
-  function updateTopicOptions() {
+  function updateTopic() {
     const grade = document.getElementById('grade-select').value;
-    const topicSelect = document.getElementById('topic-select');
-    
-    // 中身をリセット
-    topicSelect.innerHTML = '';
-
-    if (grade === "") {
-      topicSelect.innerHTML = '<option value="">先に学年を選択してください</option>';
-      topicSelect.classList.remove('highlight-select');
-      return;
+    const topicSel = document.getElementById('topic-select');
+    topicSel.innerHTML = '<option value="">選択してください</option>';
+    if(grade && db[grade]) {
+      Object.keys(db[grade]).forEach(t => topicSel.innerHTML += `<option value="${t}">${t}</option>`);
     }
-
-    // 選択された学年の単元リストを取得
-    const topics = Object.keys(allQuizDatabase[grade]);
-    
-    // 最初の選択肢
-    const defaultOpt = document.createElement('option');
-    defaultOpt.value = "";
-    defaultOpt.textContent = "単元を選択してください";
-    topicSelect.appendChild(defaultOpt);
-
-    // 単元を追加
-    topics.forEach(topic => {
-      const opt = document.createElement('option');
-      opt.value = topic;
-      opt.textContent = topic;
-      topicSelect.appendChild(opt);
-    });
-
-    topicSelect.classList.add('highlight-select'); // 視覚的に分かりやすく
   }
 
-  // キャンバスの初期化
-  function initCanvas() {
-    canvas = document.getElementById('handwriting-canvas');
-    ctx = canvas.getContext('2d');
-    ctx.lineWidth = 3;
-    ctx.lineCap = 'round';
-    ctx.strokeStyle = '#1a237e';
-
-    function getPos(e) {
-      let rect = canvas.getBoundingClientRect();
-      let clientX = e.clientX || (e.touches && e.touches[0].clientX);
-      let clientY = e.clientY || (e.touches && e.touches[0].clientY);
-      return { x: clientX - rect.left, y: clientY - rect.top };
-    }
-    function start(e) { isDrawing = true; ctx.beginPath(); let p = getPos(e); ctx.moveTo(p.x, p.y); }
-    function move(e) { if(!isDrawing) return; e.preventDefault(); let p = getPos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); }
-    function stop() { isDrawing = false; }
-
-    canvas.addEventListener('mousedown', start);
-    canvas.addEventListener('mousemove', move);
-    canvas.addEventListener('mouseup', stop);
-    canvas.addEventListener('touchstart', start, {passive: false});
-    canvas.addEventListener('touchmove', move, {passive: false});
-    canvas.addEventListener('touchend', stop);
-  }
-
-  function clearCanvas() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-  }
-
-  // 開始処理
-  document.getElementById('user-form').addEventListener('submit', function(e) {
+  document.getElementById('user-form').addEventListener('submit', (e) => {
     e.preventDefault();
-    
     const grade = document.getElementById('grade-select').value;
     const topic = document.getElementById('topic-select').value;
+    const isRandom = document.getElementById('random-check').checked;
     
-    userInfo = {
-      name: document.getElementById('name').value.trim(),
-      grade: grade, // 「1年」「2年」などの値が入る
-      number: document.getElementById('number').value,
-      topic: topic // 選択したテスト名も記録用として保持可能
-    };
+    let questions = [...db[grade][topic]];
+    if (isRandom) questions.sort(() => Math.random() - 0.5);
+    activeQuestions = questions.slice(0, 5); // 5問抽出
+    scores = new Array(activeQuestions.length).fill(null);
 
-    // 💡 データベースから選択した単元の問題セットを変数にコピー
-    quizData = allQuizDatabase[grade][topic];
-
+    buildQuizUI();
     document.getElementById('start-screen').style.display = 'none';
     document.getElementById('quiz-screen').style.display = 'block';
-    showQuestion();
   });
 
-  function showQuestion() {
-    clearCanvas();
-    document.getElementById('action-layer').style.display = 'block';
-    document.getElementById('checking-area').style.display = 'none';
-    
-    const q = quizData[currentIdx];
-    document.getElementById('question-text').innerHTML = `問 ${currentIdx + 1}: \\(${q.question}\\) =`;
+  function buildQuizUI() {
+    const container = document.getElementById('questions-container');
+    container.innerHTML = '';
+    canvases = []; contexts = []; isDrawingArr = [];
+
+    activeQuestions.forEach((item, index) => {
+      const block = document.createElement('div');
+      block.className = 'question-block';
+      block.innerHTML = `
+        <div class="q-text">問${index + 1}: \\(${item.q}\\) =</div>
+        <canvas id="cvs-${index}" width="400" height="150"></canvas>
+        <div class="canvas-tools"><button type="button" onclick="clearSpecificCanvas(${index})">リセット</button></div>
+        
+        <div class="answer-area" id="ans-area-${index}">
+          <div class="correct-ans">正解: \\(${item.a}\\)</div>
+          <div class="ox-buttons">
+            <button type="button" class="btn-o" id="btn-o-${index}" onclick="setScore(${index}, 1)">〇 正解</button>
+            <button type="button" class="btn-x" id="btn-x-${index}" onclick="setScore(${index}, 0)">× まちがい</button>
+          </div>
+        </div>
+      `;
+      container.appendChild(block);
+      
+      const cvs = document.getElementById(`cvs-${index}`);
+      const ctx = cvs.getContext('2d');
+      ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.strokeStyle = '#1a237e';
+      
+      canvases.push(cvs); contexts.push(ctx); isDrawingArr.push(false);
+      setupCanvasEvents(cvs, ctx, index);
+    });
     if (window.MathJax) MathJax.typesetPromise();
   }
 
-  function revealAnswer() {
-    document.getElementById('action-layer').style.display = 'none';
-    document.getElementById('checking-area').style.display = 'block';
-    
-    const q = quizData[currentIdx];
-    document.getElementById('correct-answer-display').innerHTML = `正解： \\(${q.answer}\\)`;
+  function setupCanvasEvents(cvs, ctx, idx) {
+    const getPos = (e) => {
+      const rect = cvs.getBoundingClientRect();
+      const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+      const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+      // CSSによる縮小を考慮して座標を補正
+      const scaleX = cvs.width / rect.width;
+      const scaleY = cvs.height / rect.height;
+      return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
+    };
+    const start = (e) => { isDrawingArr[idx] = true; ctx.beginPath(); let p = getPos(e); ctx.moveTo(p.x, p.y); };
+    const move = (e) => { if(!isDrawingArr[idx]) return; e.preventDefault(); let p = getPos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); };
+    const stop = () => { isDrawingArr[idx] = false; };
+
+    cvs.addEventListener('mousedown', start); cvs.addEventListener('mousemove', move); cvs.addEventListener('mouseup', stop);
+    cvs.addEventListener('touchstart', start, {passive:false}); cvs.addEventListener('touchmove', move, {passive:false}); cvs.addEventListener('touchend', stop);
+  }
+
+  function clearSpecificCanvas(idx) {
+    contexts[idx].clearRect(0, 0, canvases[idx].width, canvases[idx].height);
+  }
+
+  function revealAllAnswers() {
+    activeQuestions.forEach((_, i) => {
+      document.getElementById(`ans-area-${i}`).style.display = 'block';
+    });
+    document.getElementById('check-ans-btn').style.display = 'none';
+    document.getElementById('submit-btn').style.display = 'block';
     if (window.MathJax) MathJax.typesetPromise();
   }
 
-  function handleSelfAssessment(score) {
-    studentScores.push(score);
-    const imgData = canvas.toDataURL('image/jpeg', 0.3);
-    capturedImages.push(imgData);
+  function setScore(idx, val) {
+    scores[idx] = val;
+    document.getElementById(`btn-o-${idx}`).classList.toggle('selected', val === 1);
+    document.getElementById(`btn-x-${idx}`).classList.toggle('selected', val === 0);
+  }
 
-    if (currentIdx < quizData.length - 1) {
-      currentIdx++;
-      showQuestion();
-    } else {
-      processFinalSubmission();
+  async function submitTest() {
+    if (scores.includes(null)) {
+      alert("すべての問題の「〇」か「×」を選択してください。");
+      return;
     }
-  }
-
-  async function processFinalSubmission() {
+    
     document.getElementById('quiz-screen').style.display = 'none';
     document.getElementById('result-screen').style.display = 'block';
-    document.getElementById('loading').style.display = 'block';
-
-    const finalScore = studentScores.reduce((a, b) => a + b, 0);
+    
+    // 全キャンバスの画像を取得
+    const images = canvases.map(c => c.toDataURL('image/jpeg', 0.3));
+    const finalScore = scores.reduce((a,b)=>a+b,0);
     
     const payload = {
-      name: userInfo.name,
-      grade: userInfo.grade + "_" + userInfo.topic, // スプレッドシートには「3年_平方根の変形」のように記録
-      number: userInfo.number,
+      name: document.getElementById('name').value,
+      grade: document.getElementById('grade-select').value + "_" + document.getElementById('topic-select').value,
+      number: "未設定", // 省略
       score: finalScore,
-      results: studentScores.join(','),
-      images: capturedImages
+      results: scores.join(','),
+      images: images
     };
 
     try {
-      await fetch(GAS_URL, {
-        method: 'POST',
-        mode: 'no-cors', 
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify(payload)
-      });
-      
-      document.getElementById('loading').style.display = 'none';
-      document.getElementById('status-text').innerHTML = `送信が完了しました！<br>お疲れ様でした。<br><br><strong>スコア: ${quizData.length}問中 ${finalScore}問正解</strong>`;
-    } catch (error) {
-      console.error(error);
-      alert("送信中にエラーが発生しました。通信環境を確認してください。");
+      await fetch(GAS_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(payload) });
+      document.getElementById('status-text').innerHTML = `送信完了！<br>スコア: ${activeQuestions.length}問中 ${finalScore}問正解`;
+    } catch (e) {
+      alert("エラーが発生しました。");
     }
   }
 </script>
