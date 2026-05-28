@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>平方根手書き小テスト（B案：自己採点版）</title>
+  <title>数学 手書き小テストシステム</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
   <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
@@ -26,19 +26,21 @@
 
     h2 { font-size: 24px; margin-bottom: 15px; color: #333; }
 
-    form label { display: block; margin: 15px 0 5px; font-size: 18px; text-align: left; }
+    form label { display: block; margin: 15px 0 5px; font-size: 18px; text-align: left; font-weight: bold; }
     form input, form select {
       font-size: 16px; padding: 10px; width: 100%; max-width: 350px;
       margin-top: 5px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 6px;
     }
 
+    /* 選択された単元を強調するデザイン */
+    .highlight-select { border-color: #0288d1 !important; background-color: #e1f5fe; }
+
     #question-text { font-size: 34px; margin-bottom: 15px; font-weight: bold; }
     
-    /* 手書きキャンバスの設定 */
     #canvas-container { margin: 15px auto; position: relative; width: 400px; height: 200px; }
     canvas {
       border: 2px dashed #78909c; background-color: #fafafa; border-radius: 8px;
-      cursor: crosshair; touch-action: none; /* タブレットでのスクロール暴発防止 */
+      cursor: crosshair; touch-action: none;
     }
 
     .canvas-tools { margin-bottom: 20px; }
@@ -47,7 +49,6 @@
       border: none; border-radius: 4px; cursor: pointer;
     }
 
-    /* 自己採点エリア */
     #checking-area {
       display: none; margin: 20px rgba(0,0,0,0.05); padding: 15px;
       background-color: #e8f5e9; border-radius: 8px;
@@ -71,14 +72,29 @@
 <body>
 
 <div id="start-screen">
-  <h2>平方根手書きテスト (自己採点)</h2>
+  <h2>数学 手書き小テスト</h2>
   <form id="user-form">
     <label for="name">名前</label>
-    <input type="text" id="name" required>
-    <label for="grade">学年</label>
-    <input type="text" id="grade" required>
+    <input type="text" id="name" required placeholder="例：山田 太郎">
+
     <label for="number">出席番号</label>
     <select id="number" required></select>
+
+    <hr style="margin: 25px 0; border: 0; border-top: 1px solid #eee;">
+
+    <label for="grade-select">学年</label>
+    <select id="grade-select" required onchange="updateTopicOptions()">
+      <option value="">選択してください</option>
+      <option value="1年">中学1年生</option>
+      <option value="2年">中学2年生</option>
+      <option value="3年">中学3年生</option>
+    </select>
+
+    <label for="topic-select">小テストの単元</label>
+    <select id="topic-select" required>
+      <option value="">先に学年を選択してください</option>
+    </select>
+
     <div class="button-group" style="margin-top:25px;">
       <button type="submit" class="btn-action">テスト開始</button>
     </div>
@@ -119,15 +135,48 @@
   // 💡 ご自身の新しいGASのウェブアプリURLをここに貼り付けてください
   const GAS_URL = 'https://script.google.com/macros/s/AKfycbwKjsEoYlws7NgFvK4w1uiOB6PVjqke_W7zuVNqZH2_jQrfd2LmDejkh0RxLE66DC6TZQ/exec';
 
-  // テスト用問題プール（5問構成）
-  const quizData = [
-    { question: '\\sqrt{12}', answer: '2√3' },
-    { question: '\\sqrt{20}', answer: '2√5' },
-    { question: '3\\sqrt{2}', answer: '√18' },
-    { question: '\\sqrt{45}', answer: '3√5' },
-    { question: '2\\sqrt{7}', answer: '√28' }
-  ];
+  // 💡 【変更箇所③】全学年・全単元の問題データベース
+  // ここに各学年の問題をどんどん追加していくことができます。
+  const allQuizDatabase = {
+    "1年": {
+      "正の数・負の数（加減）": [
+        { question: '5 + (-8)', answer: '-3' },
+        { question: '-4 - (-7)', answer: '3' },
+        { question: '(-6) + (-2)', answer: '-8' }
+      ],
+      "一次方程式": [
+        { question: '2x + 3 = 9', answer: 'x = 3' },
+        { question: '5x - 4 = 2x + 8', answer: 'x = 4' },
+        { question: '3(x - 2) = 6', answer: 'x = 4' }
+      ]
+    },
+    "2年": {
+      "式の計算": [
+        { question: '2(3x - y) + 4(x + 2y)', answer: '10x + 6y' },
+        { question: '12x^2y \\div 4xy', answer: '3x' }
+      ],
+      "連立方程式": [
+        { question: '\\begin{cases} x + y = 5 \\\\ 2x - y = 1 \\end{cases}', answer: 'x = 2, y = 3' }
+      ]
+    },
+    "3年": {
+      "平方根の変形 (a√b)": [
+        { question: '\\sqrt{12}', answer: '2√3' },
+        { question: '\\sqrt{20}', answer: '2√5' },
+        { question: '\\sqrt{45}', answer: '3√5' }
+      ],
+      "平方根の変形 (√c)": [
+        { question: '3\\sqrt{2}', answer: '√18' },
+        { question: '2\\sqrt{7}', answer: '√28' }
+      ],
+      "式の展開": [
+        { question: '(x+2)(x+3)', answer: 'x^2+5x+6' },
+        { question: '(x-4)^2', answer: 'x^2-8x+16' }
+      ]
+    }
+  };
 
+  let quizData = []; // 選択された単元の問題が入る変数
   let currentIdx = 0;
   let userInfo = {};
   let studentScores = [];
@@ -137,8 +186,9 @@
   let canvas, ctx, isDrawing = false;
 
   window.addEventListener('DOMContentLoaded', () => {
+    // 出席番号の生成
     const numSel = document.getElementById('number');
-    for (let i = 1; i <= 15; i++) {
+    for (let i = 1; i <= 40; i++) { // クラス人数に合わせて40番までに拡張
       let opt = document.createElement('option');
       opt.value = i; opt.textContent = i + "番";
       numSel.appendChild(opt);
@@ -146,7 +196,41 @@
     initCanvas();
   });
 
-  // キャンバスの初期化とタッチイベントの設定
+  // 💡 【変更箇所④】学年が選ばれたときに単元の選択肢を切り替える処理
+  function updateTopicOptions() {
+    const grade = document.getElementById('grade-select').value;
+    const topicSelect = document.getElementById('topic-select');
+    
+    // 中身をリセット
+    topicSelect.innerHTML = '';
+
+    if (grade === "") {
+      topicSelect.innerHTML = '<option value="">先に学年を選択してください</option>';
+      topicSelect.classList.remove('highlight-select');
+      return;
+    }
+
+    // 選択された学年の単元リストを取得
+    const topics = Object.keys(allQuizDatabase[grade]);
+    
+    // 最初の選択肢
+    const defaultOpt = document.createElement('option');
+    defaultOpt.value = "";
+    defaultOpt.textContent = "単元を選択してください";
+    topicSelect.appendChild(defaultOpt);
+
+    // 単元を追加
+    topics.forEach(topic => {
+      const opt = document.createElement('option');
+      opt.value = topic;
+      opt.textContent = topic;
+      topicSelect.appendChild(opt);
+    });
+
+    topicSelect.classList.add('highlight-select'); // 視覚的に分かりやすく
+  }
+
+  // キャンバスの初期化
   function initCanvas() {
     canvas = document.getElementById('handwriting-canvas');
     ctx = canvas.getContext('2d');
@@ -179,11 +263,20 @@
   // 開始処理
   document.getElementById('user-form').addEventListener('submit', function(e) {
     e.preventDefault();
+    
+    const grade = document.getElementById('grade-select').value;
+    const topic = document.getElementById('topic-select').value;
+    
     userInfo = {
       name: document.getElementById('name').value.trim(),
-      grade: document.getElementById('grade').value.trim(),
-      number: document.getElementById('number').value
+      grade: grade, // 「1年」「2年」などの値が入る
+      number: document.getElementById('number').value,
+      topic: topic // 選択したテスト名も記録用として保持可能
     };
+
+    // 💡 データベースから選択した単元の問題セットを変数にコピー
+    quizData = allQuizDatabase[grade][topic];
+
     document.getElementById('start-screen').style.display = 'none';
     document.getElementById('quiz-screen').style.display = 'block';
     showQuestion();
@@ -199,7 +292,6 @@
     if (window.MathJax) MathJax.typesetPromise();
   }
 
-  // 「答えをみる」クリック時
   function revealAnswer() {
     document.getElementById('action-layer').style.display = 'none';
     document.getElementById('checking-area').style.display = 'block';
@@ -209,11 +301,8 @@
     if (window.MathJax) MathJax.typesetPromise();
   }
 
-  // 自己採点ボタン（〇か×）が押された時
   function handleSelfAssessment(score) {
     studentScores.push(score);
-
-    // キャンバスの手書き内容を軽量なJPEG（画質30%）のBase64文字列として取得
     const imgData = canvas.toDataURL('image/jpeg', 0.3);
     capturedImages.push(imgData);
 
@@ -225,7 +314,6 @@
     }
   }
 
-  // 最終送信処理（大容量データのため、一括POST送信を行う）
   async function processFinalSubmission() {
     document.getElementById('quiz-screen').style.display = 'none';
     document.getElementById('result-screen').style.display = 'block';
@@ -233,18 +321,16 @@
 
     const finalScore = studentScores.reduce((a, b) => a + b, 0);
     
-    // GASへ渡すパッケージデータの作成
     const payload = {
       name: userInfo.name,
-      grade: userInfo.grade,
+      grade: userInfo.grade + "_" + userInfo.topic, // スプレッドシートには「3年_平方根の変形」のように記録
       number: userInfo.number,
       score: finalScore,
       results: studentScores.join(','),
-      images: capturedImages // Base64の画像配列
+      images: capturedImages
     };
 
     try {
-      // 💡 画像を含むため、text/plainでJSON文字列をPOSTする形式を選択（CORS回避テクニック）
       await fetch(GAS_URL, {
         method: 'POST',
         mode: 'no-cors', 
