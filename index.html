@@ -162,7 +162,6 @@
   let activeTopics = [];
 
   window.addEventListener('DOMContentLoaded', async () => {
-    // 画面ロード時に確実に全てのメイン画面を初期非表示にする
     document.getElementById('start-screen').style.display = 'none';
     document.getElementById('quiz-screen').style.display = 'none';
     document.getElementById('result-screen').style.display = 'none';
@@ -170,14 +169,12 @@
 
     const urlParams = new URLSearchParams(window.location.search);
     
-    // 💡 修正: かっこ等が含まれる特殊文字でも安全にデコードできるよう、try-catchとdecodeURIComponentを徹底
     let pGrade = "";
     let pTopic = "";
     try {
       if(urlParams.get('g')) pGrade = decodeURIComponent(urlParams.get('g'));
       if(urlParams.get('t')) pTopic = decodeURIComponent(urlParams.get('t'));
     } catch(e) {
-      // 万が一標準デコードで失敗した場合は、フォールバックとして生テキストを取得
       pGrade = urlParams.get('g') || "";
       pTopic = urlParams.get('t') || "";
     }
@@ -186,7 +183,6 @@
     const pRandom = urlParams.get('r');
 
     if (pGrade && pTopic) {
-      // 【生徒画面ルート】
       isStudentMode = true;
       document.getElementById('setup-area').style.display = 'none'; 
       document.getElementById('student-login-area').style.display = 'block'; 
@@ -201,7 +197,6 @@
       document.getElementById('loading-screen').style.display = 'none';
       document.getElementById('start-screen').style.display = 'block';
     } else {
-      // 【先生画面ルート】
       try {
         const res = await fetch(`${GAS_URL}?action=getMenu`);
         db = await res.json();
@@ -273,7 +268,6 @@
     }
     
     const baseUrl = window.location.origin + window.location.pathname;
-    // URLへのエンコード処理を徹底
     const shareUrl = `${baseUrl}?g=${encodeURIComponent(grade)}&t=${encodeURIComponent(topics.join(','))}&q=${qCount}&r=${isRandom}`;
     
     document.getElementById('share-url').value = shareUrl;
@@ -500,10 +494,21 @@
     
     try {
       const quizScreen = document.getElementById('quiz-screen');
+      
+      // 💡 修正: html2canvasを動かす直前に、MathJaxが自動生成した非表示（ダブり原因）の隠し音声用テキストレイヤーを強制排除
+      const ignoredElements = quizScreen.querySelectorAll('.mjx-chtml.MJXc-processing, mjx-assistive-mml');
+      ignoredElements.forEach(el => {
+        el.setAttribute('data-html2canvas-ignore', 'true');
+      });
+      
       const capturedCanvas = await html2canvas(quizScreen, {
         scale: 2, 
         useCORS: true,
-        backgroundColor: '#f0f4f8'
+        backgroundColor: '#f0f4f8',
+        // 念のため、非表示要素をhtml2canvasに読み込ませないオプションも重ねて指定
+        ignoreElements: (element) => {
+          return element.tagName === 'MJX-ASSISTIVE-MML' || element.classList.contains('MJX_ASSISTIVE_MML');
+        }
       });
       
       const wholePageImage = capturedCanvas.toDataURL('image/jpeg', 0.6);
