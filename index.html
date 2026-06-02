@@ -162,17 +162,28 @@
   let activeTopics = [];
 
   window.addEventListener('DOMContentLoaded', async () => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const pGrade = urlParams.get('g');
-    const pTopic = urlParams.get('t'); 
-    const pQCount = urlParams.get('q') || '5';
-    const pRandom = urlParams.get('r');
-
-    // どのルートを通っても一度全てのメイン画面を隠し、ロード中のみ表示
+    // 画面ロード時に確実に全てのメイン画面を初期非表示にする
     document.getElementById('start-screen').style.display = 'none';
     document.getElementById('quiz-screen').style.display = 'none';
     document.getElementById('result-screen').style.display = 'none';
     document.getElementById('loading-screen').style.display = 'block';
+
+    const urlParams = new URLSearchParams(window.location.search);
+    
+    // 💡 修正: かっこ等が含まれる特殊文字でも安全にデコードできるよう、try-catchとdecodeURIComponentを徹底
+    let pGrade = "";
+    let pTopic = "";
+    try {
+      if(urlParams.get('g')) pGrade = decodeURIComponent(urlParams.get('g'));
+      if(urlParams.get('t')) pTopic = decodeURIComponent(urlParams.get('t'));
+    } catch(e) {
+      // 万が一標準デコードで失敗した場合は、フォールバックとして生テキストを取得
+      pGrade = urlParams.get('g') || "";
+      pTopic = urlParams.get('t') || "";
+    }
+    
+    const pQCount = urlParams.get('q') || '5';
+    const pRandom = urlParams.get('r');
 
     if (pGrade && pTopic) {
       // 【生徒画面ルート】
@@ -187,7 +198,6 @@
       document.getElementById('grade-select').innerHTML = `<option value="${pGrade}">${pGrade}</option>`;
       document.getElementById('random-check').checked = (pRandom === '1');
       
-      // 処理完了後にロード画面を隠し、スタート画面を出す
       document.getElementById('loading-screen').style.display = 'none';
       document.getElementById('start-screen').style.display = 'block';
     } else {
@@ -198,6 +208,7 @@
         
         if (db.error) {
           alert(db.error);
+          document.getElementById('loading-screen').style.display = 'none';
           return;
         }
         
@@ -209,7 +220,6 @@
         
         updateTopic();
         
-        // 処理完了後にロード画面を隠し、スタート画面を出す
         document.getElementById('loading-screen').style.display = 'none';
         document.getElementById('start-screen').style.display = 'block';
       } catch (err) {
@@ -263,6 +273,7 @@
     }
     
     const baseUrl = window.location.origin + window.location.pathname;
+    // URLへのエンコード処理を徹底
     const shareUrl = `${baseUrl}?g=${encodeURIComponent(grade)}&t=${encodeURIComponent(topics.join(','))}&q=${qCount}&r=${isRandom}`;
     
     document.getElementById('share-url').value = shareUrl;
@@ -286,7 +297,11 @@
     let qCount = 5;
     
     if (urlParams.get('g') && urlParams.get('t')) {
-      activeTopics = urlParams.get('t').split(',');
+      try {
+        activeTopics = decodeURIComponent(urlParams.get('t')).split(',');
+      } catch(e) {
+        activeTopics = urlParams.get('t').split(',');
+      }
       qCount = parseInt(urlParams.get('q') || '5', 10);
     } else {
       const checkedBoxes = document.querySelectorAll('input[name="topics"]:checked');
