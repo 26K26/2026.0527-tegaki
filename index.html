@@ -69,6 +69,9 @@
     #quiz-hd-title { font-size: 18px; font-weight: bold; color: #0288d1; }
     #quiz-hd-meta { font-size: 15px; margin-top: 5px; font-weight: bold; color: #333; }
 
+    /* タイマー表示エリアのスタイル */
+    #timer-display { display: none; font-size: 20px; font-weight: bold; color: #d32f2f; margin-bottom: 15px; background: #ffebee; padding: 10px; border-radius: 6px; border: 1px solid #ef9a9a; }
+
     #quiz-screen, #result-screen, #start-screen { display: none; }
   </style>
 </head>
@@ -125,6 +128,19 @@
       問題をランダムに並び替える
     </label>
 
+    <label style="display: flex; align-items: center; margin-top: 15px; background: #fff3e0; padding: 10px; border-radius: 6px; font-size: 14px;">
+      <input type="checkbox" id="timer-check" style="width: 20px; margin-right: 10px;" onchange="toggleTimerInput()">
+      制限時間を設定する
+    </label>
+    <div id="timer-input-area" style="display: none; margin-top: 5px; padding-left: 10px; text-align: left;">
+      <input type="number" id="timer-duration" min="1" max="120" value="10" style="width: 80px; display: inline-block; padding: 5px;"> 分
+    </div>
+
+    <label style="display: flex; align-items: center; margin-top: 15px; background: #fff3e0; padding: 10px; border-radius: 6px; font-size: 14px;">
+      <input type="checkbox" id="tab-lock-check" style="width: 20px; margin-right: 10px;">
+      タブ切り替え（移動）を禁止する
+    </label>
+
     <button type="button" class="btn-main" style="background-color: #4caf50; font-size: 16px;" onclick="generateShareLink()">生徒用配布リンク・QRコードを作成</button>
     
     <div id="qr-area" style="display:none; margin-top: 20px; padding: 15px; border: 2px dashed #4caf50; border-radius: 8px; background: #f1f8e9; text-align: center;">
@@ -149,6 +165,8 @@
 </div>
 
 <div class="container" id="quiz-screen">
+  <div id="timer-display">⏱️ 残り時間: <span id="timer-count">--:--</span></div>
+
   <div id="quiz-header">
     <div id="quiz-hd-title"></div>
     <div id="quiz-hd-meta"></div>
@@ -178,6 +196,13 @@
   let scores = [];
   let isStudentMode = false;
   let activeTopics = [];
+
+  // 【追加】テスト管理用変数
+  let isTimerEnabled = false;
+  let timerDurationSeconds = 600; 
+  let timerInterval = null;
+  let isTabLockEnabled = false;
+  let isQuizActive = false; // テスト実施中（答え合わせ前）かどうかの判定フラグ
 
   window.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('start-screen').style.display = 'none';
@@ -242,6 +267,12 @@
     }
   });
 
+  // 【追加】タイマー設定入力欄の表示切り替え
+  function toggleTimerInput() {
+    const chk = document.getElementById('timer-check');
+    document.getElementById('timer-input-area').style.display = chk.checked ? 'block' : 'none';
+  }
+
   function updateTopic() {
     const grade = document.getElementById('grade-select').value;
     const container = document.getElementById('topic-checkboxes');
@@ -280,13 +311,19 @@
     const qCount = document.getElementById('question-count-select').value;
     const isRandom = document.getElementById('random-check').checked ? '1' : '0';
     
+    // 【追加】パラメータ取得
+    const isTimer = document.getElementById('timer-check').checked ? '1' : '0';
+    const duration = document.getElementById('timer-duration').value;
+    const isTabLock = document.getElementById('tab-lock-check').checked ? '1' : '0';
+    
     if (!grade || topics.length === 0) {
       alert("生徒に配布する「学年・教科」と「単元」を先に選択してください。");
       return;
     }
     
     const baseUrl = window.location.origin + window.location.pathname;
-    const shareUrl = `${baseUrl}?g=${encodeURIComponent(grade)}&t=${encodeURIComponent(topics.join(','))}&q=${qCount}&r=${isRandom}`;
+    // URLに新設定を付与
+    const shareUrl = `${baseUrl}?g=${encodeURIComponent(grade)}&t=${encodeURIComponent(topics.join(','))}&q=${qCount}&r=${isRandom}&tm=${isTimer}&tl=${duration}&tb=${isTabLock}`;
     
     document.getElementById('share-url').value = shareUrl;
     const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(shareUrl)}`;
@@ -315,10 +352,20 @@
         activeTopics = urlParams.get('t').split(',');
       }
       qCount = parseInt(urlParams.get('q') || '5', 10);
+      
+      // 【追加】生徒モード時のパラメータ読み込み
+      isTimerEnabled = (urlParams.get('tm') === '1');
+      timerDurationSeconds = parseInt(urlParams.get('tl') || '10', 10) * 60;
+      isTabLockEnabled = (urlParams.get('tb') === '1');
     } else {
       const checkedBoxes = document.querySelectorAll('input[name="topics"]:checked');
       activeTopics = Array.from(checkedBoxes).map(cb => cb.value);
       qCount = parseInt(document.getElementById('question-count-select').value, 10);
+      
+      // 【追加】先生自身がテストをプレビューする場合の設定取得
+      isTimerEnabled = document.getElementById('timer-check').checked;
+      timerDurationSeconds = parseInt(document.getElementById('timer-duration').value, 10) * 60;
+      isTabLockEnabled = document.getElementById('tab-lock-check').checked;
     }
     
     if (activeTopics.length === 0) {
@@ -364,6 +411,15 @@
       document.getElementById('quiz-screen').style.display = 'block';
       
       syncCanvasSizes();
+
+      // 【追加】クイズ画面表示後にテスト機能を発動
+      isQuizActive = true;
+      if (isTimerEnabled) {
+        startTimerCounter();
+      }
+      if (isTabLockEnabled) {
+        startTabLockListening();
+      }
       
     } catch (err) {
       alert("問題データのロードに失敗しました。");
@@ -371,6 +427,56 @@
       document.getElementById('start-screen').style.display = 'block';
     }
   });
+
+  // 【追加】制限タイマーカウントダウンの処理
+  function startTimerCounter() {
+    const displayArea = document.getElementById('timer-display');
+    const countEl = document.getElementById('timer-count');
+    displayArea.style.display = 'block';
+    
+    let timeRemaining = timerDurationSeconds;
+    updateTimerDisplay(timeRemaining, countEl);
+    
+    timerInterval = setInterval(() => {
+      timeRemaining--;
+      updateTimerDisplay(timeRemaining, countEl);
+      
+      if (timeRemaining <= 0) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+        isQuizActive = false; // 先にフラグを落としてタブ移動の誤動作を防ぐ
+        alert("⏳ 制限時間になりました！自動的に答え合わせページに移動します。");
+        revealAllAnswers();
+      }
+    }, 1000);
+  }
+
+  function updateTimerDisplay(secs, element) {
+    if (secs < 0) secs = 0;
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    element.innerText = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
+
+  // 【追加】タブ移動（非表示）監視の開始
+  function startTabLockListening() {
+    document.removeEventListener('visibilitychange', handleTabLeave);
+    document.addEventListener('visibilitychange', handleTabLeave);
+  }
+
+  // 【追加】タブ移動が検出されたときの強制切り替え処理
+  function handleTabLeave() {
+    if (!isQuizActive) return;
+    
+    // タブが切り替わるかブラウザが最小化された時
+    if (document.hidden || document.visibilityState === 'hidden') {
+      isQuizActive = false;
+      document.removeEventListener('visibilitychange', handleTabLeave);
+      
+      alert("⚠️ タブの移動（またはブラウザの離脱）が検出されました！\n不正行為防止のため、テストを強制終了し、答え合わせページへ移動します。");
+      revealAllAnswers();
+    }
+  }
 
   async function buildQuizUI() {
     const container = document.getElementById('questions-container');
@@ -615,6 +721,19 @@
   }
 
   function revealAllAnswers() {
+    // 【追加】タイマーとタブ監視を終了させる
+    isQuizActive = false;
+    if (timerInterval) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+    }
+    document.removeEventListener('visibilitychange', handleTabLeave);
+
+    // 【追加】もしタイマー表示が残っていれば「終了」にする
+    if (isTimerEnabled) {
+      document.getElementById('timer-count').innerText = "終了";
+    }
+
     activeQuestions.forEach((_, i) => {
       document.getElementById(`ans-area-${i}`).style.display = 'block';
       
