@@ -723,7 +723,7 @@
     }
   }
 
-  async function buildQuizUI() {
+   async function buildQuizUI() {
     const container = document.getElementById('questions-container');
     container.innerHTML = '';
     canvases = [];
@@ -759,7 +759,531 @@
         <div class="control-zone">
           <div class="canvas-tools" style="display:flex;flex-wrap:wrap;justify-content:flex-end;gap:4px;">
             <button type="button" class="btn-tool active" id="pen-btn-${index}" onclick="setToolMode(${index}, 'pen')">✏️ 記入</button>
-            <button type="button" class="btn-tool" id="eraser-btn-${index}" onclick
+            <button type="button" class="btn-tool" id="eraser-btn-${index}" onclick="setToolMode(${index}, 'eraser')">🧽 消しゴム</button>
+            <button type="button" class="btn-tool" id="obj-eraser-btn-${index}" onclick="setToolMode(${index}, 'obj-eraser')">🧼 線消去</button>
+            <button type="button" class="btn-tool" id="undo-btn-${index}" onclick="undoCanvas(${index})">↩️ 戻る</button>
+            <button type="button" class="btn-tool" id="reset-btn-${index}" onclick="clearSpecificCanvas(${index})">🗑️ 全消去</button>
+            <button type="button" class="btn-tool" id="replay-btn-${index}" onclick="replayQuestion(${index})" ${answerRevealed ? '' : 'disabled'}>▶ 再生</button>
+          </div>
+
+          <div class="answer-area" id="ans-area-${index}">
+            <div class="correct-ans">正解: ${displayAnswer}</div>
+            <div class="ox-buttons">
+              <button type="button" class="btn-o" id="btn-o-${index}" onclick="setScore(${index}, 1)">〇 正解</button>
+              <button type="button" class="btn-x" id="btn-x-${index}" onclick="setScore(${index}, 0)">× まちがい</button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      container.appendChild(block);
+
+      const cvs = document.getElementById(`cvs-${index}`);
+      const ctx = cvs.getContext('2d');
+      canvases.push(cvs);
+      contexts.push(ctx);
+      isDrawingArr.push(false);
+
+      setupCanvasEvents(cvs, ctx, index);
+    });
+
+    if (window.MathJax) {
+      await MathJax.typesetPromise();
+    }
+  }
+
+  function syncCanvasSizes() {
+    activeQuestions.forEach((_, index) => {
+      const zone = document.getElementById(`main-zone-${index}`);
+      const cvs = document.getElementById(`cvs-${index}`);
+      if (!zone || !cvs) return;
+
+      const rect = zone.getBoundingClientRect();
+      cvs.width = rect.width;
+      cvs.height = rect.height;
+
+      redrawCanvas(index);
+      setToolMode(index, toolModes[index] || 'pen');
+    });
+  }
+
+  function applyScoreSelectionUI(idx) {
+    const btnO = document.getElementById(`btn-o-${idx}`);
+    const btnX = document.getElementById(`btn-x-${idx}`);
+    if (!btnO || !btnX) return;
+
+    btnO.classList.toggle('selected', scores[idx] === 1);
+    btnX.classList.toggle('selected', scores[idx] === 0);
+  }
+
+  function setToolMode(idx, mode) {
+    toolModes[idx] = mode;
+
+    const penBtn = document.getElementById(`pen-btn-${idx}`);
+    const eraserBtn = document.getElementById(`eraser-btn-${idx}`);
+    const objEraserBtn = document.getElementById(`obj-eraser-btn-${idx}`);
+
+    if (penBtn) penBtn.classList.toggle('active', mode === 'pen');
+    if (eraserBtn) eraserBtn.classList.toggle('active', mode === 'eraser');
+    if (objEraserBtn) objEraserBtn.classList.toggle('active', mode === 'obj-eraser');
+  }
+
+  function drawStrokeImmediately(ctx, stroke) {
+    if (!stroke || !stroke.points || stroke.points.length === 0) return;
+
+    ctx.beginPath();
+
+    if (stroke.mode === 'pen') {
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.lineWidth = stroke.width || 3;
+      ctx.strokeStyle = stroke.color || '#1a237e';
+    } else {
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.lineWidth = stroke.width || 24;
+    }
+
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+
+    if (stroke.points.length === 1) {
+      ctx.lineTo(stroke.points[0].x + 0.1, stroke.points[0].y);
+    } else {
+      for (let i = 1; i < stroke.points.length; i++) {
+        ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
+      }
+    }
+
+    ctx.stroke();
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  function redrawCanvas(idx) {
+    const cvs = canvases[idx];
+    const ctx = contexts[idx];
+    if (!cvs || !ctx) return;
+
+    ctx.clearRect(0, 0, cvs.width, cvs.height);
+
+    if (!strokeHistories[idx]) return;
+
+    strokeHistories[idx].forEach(stroke => {
+      drawStrokeImmediately(ctx, stroke);
+    });
+  }
+
+  function undoCanvas(idx) {
+    if (strokeHistories[idx] && strokeHistories[idx].length > 0) {
+      strokeHistories[idx].pop();
+      redrawCanvas(idx);
+      logAction('undo', { questionIndex: idx });
+      saveQuizState();
+    }
+  }
+
+  function getDistancePointToSegment(p, a, b) {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+
+    if (dx === 0 && dy === 0) {
+      return Math.hypot(p.x - a.x, p.y - a.y);
+    }
+
+    let t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy);
+    t = Math.max(0, Math.min(1, t));
+
+    const closestX = a.x + t * dx;
+    const closestY = a.y + t * dy;
+    return Math.hypot(p.x - closestX, p.y - closestY);
+  }
+
+  function checkCollision(pos, idx) {
+    const history = strokeHistories[idx];
+    if (!history) return false;
+
+    let hitIndex = -1;
+
+    for (let i = history.length - 1; i >= 0; i--) {
+      const stroke = history[i];
+      const pts = stroke.points || [];
+      const threshold = stroke.mode === 'eraser' ? (stroke.width || 24) / 2 + 10 : 15;
+
+      if (pts.length === 1) {
+        const dist = Math.hypot(pos.x - pts[0].x, pos.y - pts[0].y);
+        if (dist < threshold) {
+          hitIndex = i;
+          break;
+        }
+        continue;
+      }
+
+      for (let j = 0; j < pts.length - 1; j++) {
+        const dist = getDistancePointToSegment(pos, pts[j], pts[j + 1]);
+        if (dist < threshold) {
+          hitIndex = i;
+          break;
+        }
+      }
+
+      if (hitIndex !== -1) break;
+    }
+
+    if (hitIndex !== -1) {
+      history.splice(hitIndex, 1);
+      redrawCanvas(idx);
+      logAction('obj_erase', { questionIndex: idx, removedIndex: hitIndex });
+      saveQuizState();
+      return true;
+    }
+
+    return false;
+  }
+
+  function setupCanvasEvents(cvs, ctx, idx) {
+    const getPos = (e) => {
+      const rect = cvs.getBoundingClientRect();
+      const clientX = e.clientX || (e.touches && e.touches[0] && e.touches[0].clientX);
+      const clientY = e.clientY || (e.touches && e.touches[0] && e.touches[0].clientY);
+      const scaleX = cvs.width / rect.width;
+      const scaleY = cvs.height / rect.height;
+
+      return {
+        x: (clientX - rect.left) * scaleX,
+        y: (clientY - rect.top) * scaleY
+      };
+    };
+
+    let currentStroke = null;
+
+    const start = (e) => {
+      if (!isQuizActive || answerRevealed) return;
+
+      if (e.cancelable) e.preventDefault();
+
+      isDrawingArr[idx] = true;
+      const p = getPos(e);
+      const mode = toolModes[idx];
+
+      if (mode === 'obj-eraser') {
+        checkCollision(p, idx);
+        return;
+      }
+
+      currentStroke = {
+        mode,
+        points: [p],
+        width: mode === 'pen' ? 3 : 24,
+        color: '#1a237e',
+        startedAtMs: quizStartedAt ? (Date.now() - quizStartedAt) : 0,
+        endedAtMs: null
+      };
+
+      ctx.beginPath();
+      if (mode === 'pen') {
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = '#1a237e';
+      } else {
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.lineWidth = 24;
+      }
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.moveTo(p.x, p.y);
+    };
+
+    const move = (e) => {
+      if (!isDrawingArr[idx]) return;
+      if (e.cancelable) e.preventDefault();
+
+      const p = getPos(e);
+      const mode = toolModes[idx];
+
+      if (mode === 'obj-eraser') {
+        checkCollision(p, idx);
+      } else if (currentStroke) {
+        currentStroke.points.push(p);
+        ctx.lineTo(p.x, p.y);
+        ctx.stroke();
+      }
+    };
+
+    const stop = () => {
+      if (!isDrawingArr[idx]) return;
+      isDrawingArr[idx] = false;
+
+      const mode = toolModes[idx];
+
+      if (mode !== 'obj-eraser' && currentStroke && currentStroke.points.length > 0) {
+        if (currentStroke.points.length === 1) {
+          ctx.lineTo(currentStroke.points[0].x + 0.1, currentStroke.points[0].y);
+          ctx.stroke();
+        }
+
+        currentStroke.endedAtMs = quizStartedAt ? (Date.now() - quizStartedAt) : 0;
+        strokeHistories[idx].push(currentStroke);
+
+        logAction('stroke', {
+          questionIndex: idx,
+          mode: currentStroke.mode,
+          startedAtMs: currentStroke.startedAtMs,
+          endedAtMs: currentStroke.endedAtMs
+        });
+
+        saveQuizState();
+      }
+
+      currentStroke = null;
+      ctx.globalCompositeOperation = 'source-over';
+    };
+
+    cvs.addEventListener('mousedown', start);
+    cvs.addEventListener('mousemove', move);
+    cvs.addEventListener('mouseup', stop);
+    cvs.addEventListener('mouseleave', stop);
+
+    cvs.addEventListener('touchstart', start, { passive: false });
+    cvs.addEventListener('touchmove', move, { passive: false });
+    cvs.addEventListener('touchend', stop);
+    cvs.addEventListener('touchcancel', stop);
+
+    window.addEventListener('mouseup', stop);
+  }
+
+  function clearSpecificCanvas(idx) {
+    strokeHistories[idx] = [];
+    redrawCanvas(idx);
+    logAction('clear_canvas', { questionIndex: idx });
+    saveQuizState();
+  }
+
+  function revealAllAnswers(options = {}) {
+    const { skipLog = false, fromRestore = false } = options;
+
+    answerRevealed = true;
+    isQuizActive = false;
+
+    if (timerInterval) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+    }
+
+    document.removeEventListener('visibilitychange', handleTabLeave);
+
+    if (isTimerEnabled) {
+      const timerCount = document.getElementById('timer-count');
+      if (timerCount && remainingTimeSeconds <= 0) {
+        timerCount.innerText = '終了';
+      }
+    }
+
+    activeQuestions.forEach((_, i) => {
+      const ansArea = document.getElementById(`ans-area-${i}`);
+      if (ansArea) ansArea.style.display = 'block';
+
+      const cvs = document.getElementById(`cvs-${i}`);
+      if (cvs) {
+        cvs.style.pointerEvents = 'none';
+        cvs.style.backgroundColor = 'rgba(0, 0, 0, 0.02)';
+      }
+
+      const penBtn = document.getElementById(`pen-btn-${i}`);
+      const eraserBtn = document.getElementById(`eraser-btn-${i}`);
+      const objEraserBtn = document.getElementById(`obj-eraser-btn-${i}`);
+      const undoBtn = document.getElementById(`undo-btn-${i}`);
+      const resetBtn = document.getElementById(`reset-btn-${i}`);
+      const replayBtn = document.getElementById(`replay-btn-${i}`);
+
+      if (penBtn) penBtn.disabled = true;
+      if (eraserBtn) eraserBtn.disabled = true;
+      if (objEraserBtn) objEraserBtn.disabled = true;
+      if (undoBtn) undoBtn.disabled = true;
+      if (resetBtn) resetBtn.disabled = true;
+      if (replayBtn) replayBtn.disabled = !(strokeHistories[i] && strokeHistories[i].length > 0);
+
+      applyScoreSelectionUI(i);
+    });
+
+    document.getElementById('check-ans-btn').style.display = 'none';
+    document.getElementById('submit-btn').style.display = 'block';
+
+    if (!skipLog) {
+      logAction('answers_revealed', {
+        reason: fromRestore ? 'restore' : (remainingTimeSeconds <= 0 ? 'timeout' : 'manual')
+      });
+    }
+
+    saveQuizState();
+
+    if (window.MathJax) {
+      MathJax.typesetPromise();
+    }
+  }
+
+  function setScore(idx, val) {
+    scores[idx] = val;
+    applyScoreSelectionUI(idx);
+    logAction('score_set', { questionIndex: idx, value: val });
+    saveQuizState();
+  }
+
+  function wait(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  async function drawStrokeAnimated(ctx, stroke, idx) {
+    if (!stroke || !stroke.points || stroke.points.length === 0) return;
+
+    ctx.beginPath();
+
+    if (stroke.mode === 'pen') {
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.lineWidth = stroke.width || 3;
+      ctx.strokeStyle = stroke.color || '#1a237e';
+    } else {
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.lineWidth = stroke.width || 24;
+    }
+
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+
+    if (stroke.points.length === 1) {
+      ctx.lineTo(stroke.points[0].x + 0.1, stroke.points[0].y);
+      ctx.stroke();
+      await wait(80);
+      ctx.globalCompositeOperation = 'source-over';
+      return;
+    }
+
+    for (let i = 1; i < stroke.points.length; i++) {
+      if (!replayStates[idx]) break;
+      ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
+      ctx.stroke();
+      await wait(8);
+    }
+
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  async function replayQuestion(idx) {
+    const history = strokeHistories[idx] || [];
+    const btn = document.getElementById(`replay-btn-${idx}`);
+    const cvs = canvases[idx];
+    const ctx = contexts[idx];
+
+    if (!btn || !cvs || !ctx || history.length === 0) return;
+
+    if (replayStates[idx]) {
+      replayStates[idx] = false;
+      btn.innerText = '▶ 再生';
+      redrawCanvas(idx);
+      return;
+    }
+
+    replayStates[idx] = true;
+    btn.innerText = '■ 停止';
+
+    ctx.clearRect(0, 0, cvs.width, cvs.height);
+
+    let prevEnd = null;
+
+    for (const stroke of history) {
+      if (!replayStates[idx]) break;
+
+      let gap = 80;
+      if (prevEnd != null && Number.isFinite(stroke.startedAtMs)) {
+        gap = Math.max(0, Math.min(800, stroke.startedAtMs - prevEnd));
+        gap = Math.max(20, Math.floor(gap / 4));
+      }
+
+      await wait(gap);
+      await drawStrokeAnimated(ctx, stroke, idx);
+
+      if (Number.isFinite(stroke.endedAtMs)) {
+        prevEnd = stroke.endedAtMs;
+      }
+    }
+
+    redrawCanvas(idx);
+    replayStates[idx] = false;
+    btn.innerText = '▶ 再生';
+    btn.disabled = !answerRevealed || history.length === 0;
+  }
+
+  async function submitTest() {
+    if (scores.includes(null)) {
+      alert('すべての問題の「〇」か「×」を選択してください。');
+      return;
+    }
+
+    const submitBtn = document.getElementById('submit-btn');
+    submitBtn.disabled = true;
+    submitBtn.innerText = 'ページ全体の画像ファイルを生成中...';
+
+    try {
+      logAction('submit_clicked');
+      saveQuizState();
+
+      const quizScreen = document.getElementById('quiz-screen');
+      const ignoredElements = quizScreen.querySelectorAll('.mjx-chtml.MJXc-processing, mjx-assistive-mml');
+      ignoredElements.forEach(el => {
+        el.setAttribute('data-html2canvas-ignore', 'true');
+      });
+
+      const capturedCanvas = await html2canvas(quizScreen, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#f0f4f8',
+        ignoreElements: (element) => {
+          return element.tagName === 'MJX-ASSISTIVE-MML' || element.classList.contains('MJX_ASSISTIVE_MML');
+        }
+      });
+
+      const wholePageImage = capturedCanvas.toDataURL('image/jpeg', 0.6);
+
+      document.getElementById('quiz-screen').style.display = 'none';
+      document.getElementById('result-screen').style.display = 'block';
+
+      const finalScore = scores.reduce((a, b) => a + (Number(b) || 0), 0);
+
+      logAction('submitted', {
+        score: finalScore,
+        questionCount: activeQuestions.length
+      });
+
+      const payload = {
+        name: document.getElementById('name').value,
+        grade: document.getElementById('grade-select').value + '_' + activeTopics.join(','),
+        number: document.getElementById('number').value,
+        score: finalScore,
+        results: scores.join(','),
+        answerLogs,
+        images: [wholePageImage]
+      };
+
+      await fetch(GAS_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify(payload)
+      });
+
+      clearSavedQuizState();
+
+      document.getElementById('status-text').innerHTML =
+        `送信完了！<br>スコア: ${activeQuestions.length}問中 ${finalScore}問正解`;
+    } catch (e) {
+      alert('エラーが発生しました。');
+      document.getElementById('result-screen').style.display = 'none';
+      document.getElementById('quiz-screen').style.display = 'block';
+      submitBtn.disabled = false;
+      submitBtn.innerText = '結果を送信する';
+    }
+  }
 </script>
 </body>
 </html>
