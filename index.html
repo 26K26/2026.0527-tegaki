@@ -183,8 +183,7 @@
   let scores = [];
   let isStudentMode = false;
   let activeTopics = [];
-
-  // 【追加】テスト管理用変数
+  
   let isTimerEnabled = false;
   let timerDurationSeconds = 600; 
   let timerInterval = null;
@@ -254,7 +253,6 @@
     }
   });
 
-  // 【追加】タイマー設定入力欄の表示切り替え
   function toggleTimerInput() {
     const chk = document.getElementById('timer-check');
     document.getElementById('timer-input-area').style.display = chk.checked ? 'block' : 'none';
@@ -298,7 +296,6 @@
     const qCount = document.getElementById('question-count-select').value;
     const isRandom = document.getElementById('random-check').checked ? '1' : '0';
     
-    // 【追加】パラメータ取得
     const isTimer = document.getElementById('timer-check').checked ? '1' : '0';
     const duration = document.getElementById('timer-duration').value;
     const isTabLock = document.getElementById('tab-lock-check').checked ? '1' : '0';
@@ -309,7 +306,6 @@
     }
     
     const baseUrl = window.location.origin + window.location.pathname;
-    // URLに新設定を付与
     const shareUrl = `${baseUrl}?g=${encodeURIComponent(grade)}&t=${encodeURIComponent(topics.join(','))}&q=${qCount}&r=${isRandom}&tm=${isTimer}&tl=${duration}&tb=${isTabLock}`;
     
     document.getElementById('share-url').value = shareUrl;
@@ -340,7 +336,6 @@
       }
       qCount = parseInt(urlParams.get('q') || '5', 10);
       
-      // 【追加】生徒モード時のパラメータ読み込み
       isTimerEnabled = (urlParams.get('tm') === '1');
       timerDurationSeconds = parseInt(urlParams.get('tl') || '10', 10) * 60;
       isTabLockEnabled = (urlParams.get('tb') === '1');
@@ -349,7 +344,6 @@
       activeTopics = Array.from(checkedBoxes).map(cb => cb.value);
       qCount = parseInt(document.getElementById('question-count-select').value, 10);
       
-      // 【追加】先生自身がテストをプレビューする場合の設定取得
       isTimerEnabled = document.getElementById('timer-check').checked;
       timerDurationSeconds = parseInt(document.getElementById('timer-duration').value, 10) * 60;
       isTabLockEnabled = document.getElementById('tab-lock-check').checked;
@@ -399,7 +393,6 @@
       
       syncCanvasSizes();
 
-      // 【追加】クイズ画面表示後にテスト機能を発動
       isQuizActive = true;
       if (isTimerEnabled) {
         startTimerCounter();
@@ -415,7 +408,6 @@
     }
   });
 
-  // 【追加】制限タイマーカウントダウンの処理
   function startTimerCounter() {
     const displayArea = document.getElementById('timer-display');
     const countEl = document.getElementById('timer-count');
@@ -445,17 +437,14 @@
     element.innerText = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   }
 
-  // 【追加】タブ移動（非表示）監視の開始
   function startTabLockListening() {
     document.removeEventListener('visibilitychange', handleTabLeave);
     document.addEventListener('visibilitychange', handleTabLeave);
   }
 
-  // 【追加】タブ移動が検出されたときの強制切り替え処理
   function handleTabLeave() {
     if (!isQuizActive) return;
-    
-    // タブが切り替わるかブラウザが最小化された時
+
     if (document.hidden || document.visibilityState === 'hidden') {
       isQuizActive = false;
       document.removeEventListener('visibilitychange', handleTabLeave);
@@ -542,7 +531,6 @@
     document.getElementById(`obj-eraser-btn-${idx}`).classList.toggle('active', mode === 'obj-eraser');
   }
 
-  // 内部履歴に基づいてキャンバス全体を再描画する関数
   function redrawCanvas(idx) {
     const cvs = canvases[idx];
     const ctx = contexts[idx];
@@ -577,7 +565,6 @@
     });
   }
 
-  // 1文字戻る (Undo) 処理
   function undoCanvas(idx) {
     if (strokeHistories[idx] && strokeHistories[idx].length > 0) {
       strokeHistories[idx].pop();
@@ -585,7 +572,6 @@
     }
   }
 
-  // 点Pと線分ABの最短距離を求めるヘルパー関数（オブジェクト消しゴム用）
   function getDistancePointToSegment(p, a, b) {
     const dx = b.x - a.x;
     const dy = b.y - a.y;
@@ -599,17 +585,14 @@
     return Math.hypot(p.x - closestX, p.y - closestY);
   }
 
-  // オブジェクト消しゴムの衝突判定と線消去処理
   function checkCollision(pos, idx) {
     const history = strokeHistories[idx];
     if (!history) return false;
     let hitIndex = -1;
-    
-    // 上に描かれた線から順に判定するため逆順ループ
+
     for (let i = history.length - 1; i >= 0; i--) {
       const stroke = history[i];
       const pts = stroke.points;
-      // 元の線の太さに応じて当たり判定の広さを調整
       const threshold = stroke.mode === 'eraser' ? stroke.width / 2 + 10 : 15;
       
       for (let j = 0; j < pts.length - 1; j++) {
@@ -757,8 +740,7 @@
     
     try {
       const quizScreen = document.getElementById('quiz-screen');
-      
-      // 💡 修正: html2canvasを動かす直前に、MathJaxが自動生成した非表示（ダブり原因）の隠し音声用テキストレイヤーを強制排除
+
       const ignoredElements = quizScreen.querySelectorAll('.mjx-chtml.MJXc-processing, mjx-assistive-mml');
       ignoredElements.forEach(el => {
         el.setAttribute('data-html2canvas-ignore', 'true');
@@ -768,7 +750,6 @@
         scale: 2, 
         useCORS: true,
         backgroundColor: '#f0f4f8',
-        // 念のため、非表示要素をhtml2canvasに読み込ませないオプションも重ねて指定
         ignoreElements: (element) => {
           return element.tagName === 'MJX-ASSISTIVE-MML' || element.classList.contains('MJX_ASSISTIVE_MML');
         }
