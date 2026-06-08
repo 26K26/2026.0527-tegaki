@@ -13,44 +13,33 @@
     h2 { color: #333; margin-bottom: 5px; }
     h3 { color: #0288d1; margin-top: 5px; margin-bottom: 20px; }
     
-    /* 入力フォーム */
     form label { display: block; margin: 15px 0 5px; font-weight: bold; text-align: left; }
     form input, form select { width: 100%; padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
     
-    /* 先生用設定エリアの装飾 */
     #setup-area { text-align: left; }
     .menu-title { font-size: 16px; color: #333; font-weight: bold; margin-bottom: 20px; text-align: center; border-bottom: 2px solid #0288d1; padding-bottom: 8px; }
     
-    /* 1問ずつのブロック */
     .question-block { border: 2px solid #e0e0e0; border-radius: 8px; margin-bottom: 25px; background-color: #fafafa; overflow: hidden; text-align: left; }
     
-    /* 2層構造（テキスト層とキャンバス層）を内包するメインゾーン */
     .quiz-main-zone { position: relative; width: 100%; background-color: #fff; }
     
-    /* 背面：テキスト層 */
     .text-layer { padding: 15px; position: relative; z-index: 1; pointer-events: none; user-select: none; }
     .q-text { font-size: 22px; font-weight: bold; color: #333; margin-bottom: 15px; }
-    
-    /* 計算・メモスペースの縦幅を300pxに拡張 */
+  
     .memo-guide { border-top: 1px dashed #b0bec5; margin-top: 10px; padding-top: 5px; height: 300px; color: #90a4ae; font-size: 13px; }
-    
-    /* 解答欄の枠組み */
+  
     .ans-box-frame { border: 2px solid #0288d1; border-radius: 6px; padding: 8px 12px; background-color: #e1f5fe; width: 70%; margin: 10px 0 0 auto; box-sizing: border-box; }
     .ans-box-label { font-size: 11px; color: #0288d1; font-weight: bold; display: block; margin-bottom: 25px; }
-    
-    /* 前面：透明キャンバス層 */
+ 
     canvas.canvas-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; background: transparent; cursor: crosshair; touch-action: none; }
     
-    /* キャンバスの外側（操作・自己採点エリア） */
     .control-zone { padding: 10px 15px; background-color: #f5f7f8; border-top: 1px solid #e0e0e0; position: relative; z-index: 3; }
     .canvas-tools { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
     
-    /* モード切り替えツールのボタンスタイル */
     .btn-tool { padding: 6px 10px; font-size: 12px; background-color: #e0e0e0; color: #333; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
     .btn-tool.active { background-color: #0288d1; color: white; }
     .btn-tool:disabled { background-color: #e0e0e0; color: #a6a6a6; cursor: not-allowed; }
     
-    /* 自己採点エリア */
     .answer-area { display: none; margin-top: 10px; padding-top: 10px; border-top: 1px dashed #ccc; }
     .correct-ans { font-size: 20px; color: #2e7d32; font-weight: bold; margin-bottom: 10px; }
     .ox-buttons { text-align: center; }
@@ -63,13 +52,11 @@
     .btn-main { padding: 12px 30px; font-size: 18px; background-color: #0288d1; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 20px; }
     .btn-main:hover { background-color: #01579b; }
     .btn-main:disabled { background-color: #b0bec5; cursor: not-allowed; }
-    
-    /* 送信画像に含めるヘッダー情報 */
+     
     #quiz-header { display: none; text-align: left; padding-bottom: 10px; margin-bottom: 20px; border-bottom: 2px solid #333; }
     #quiz-hd-title { font-size: 18px; font-weight: bold; color: #0288d1; }
     #quiz-hd-meta { font-size: 15px; margin-top: 5px; font-weight: bold; color: #333; }
 
-    /* タイマー表示エリアのスタイル */
     #timer-display { display: none; font-size: 20px; font-weight: bold; color: #d32f2f; margin-bottom: 15px; background: #ffebee; padding: 10px; border-radius: 6px; border: 1px solid #ef9a9a; }
 
     #quiz-screen, #result-screen, #start-screen { display: none; }
